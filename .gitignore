@@ -40,3 +40,6 @@ build/
 # Backup (descomentar para no subir archivos viejos al repo)
 # backup/
 
+
+# Azure credentials (nunca subir al repo)
+AZURE_CREDENTIALS*.json

@@ -23,6 +23,9 @@ RUN pip install --no-cache-dir --upgrade -r requirements.txt
 # 6. Copiamos TODA la estructura del proyecto (app/, ml_models/, etc.)
 COPY . .
 
+# 6.1. Creamos las carpetas necesarias para guardar modelos y logs
+RUN mkdir -p /code/ml_models /code/logs
+
 # 7. Exponemos el puerto que usa Azure por defecto (generalmente 80 o 8000)
 # Azure App Service busca el puerto 8000 o 80 automáticamente.
 EXPOSE 8000
