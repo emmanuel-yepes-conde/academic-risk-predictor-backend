@@ -1,192 +1,410 @@
-# 🤖 Backend - Predictor de Riesgo Académico
+# 🏗️ Academic Risk Predictor Backend - Arquitectura Refactorizada
 
-API REST desarrollada con **FastAPI** y **Machine Learning (Regresión Logística)** para predecir el riesgo de reprobación académica.
+## 📋 Tabla de Contenidos
+- [Descripción](#descripción)
+- [Arquitectura](#arquitectura)
+- [Estructura del Proyecto](#estructura-del-proyecto)
+- [Instalación](#instalación)
+- [Ejecución](#ejecución)
+- [Endpoints Disponibles](#endpoints-disponibles)
+- [Desarrollo](#desarrollo)
 
-## 🚀 Características
+---
 
-- ✅ Predicción de riesgo usando **Regresión Logística**
-- ✅ Análisis personalizado con consejos específicos
-- ✅ API REST con documentación automática (Swagger)
-- ✅ CORS habilitado para acceso público
-- ✅ Modelo entrenado automáticamente al iniciar
+## 📖 Descripción
 
-## 📋 Requisitos
+Sistema de predicción de riesgo académico basado en Machine Learning (Regresión Logística) que ha sido refactorizado siguiendo **Clean Architecture** (Arquitectura en Capas).
 
-- Python 3.12 o superior
-- pip (gestor de paquetes de Python)
+**Tecnologías:**
+- FastAPI (Framework Web)
+- Scikit-learn (Machine Learning)
+- Pydantic (Validación de Datos)
+- Pandas & Numpy (Análisis de Datos)
 
-## ⚡ Instalación Rápida
+**Proyecto Final - Semestre 2025-II**
 
-### 1. Clonar el repositorio
+---
 
+## 🏛️ Arquitectura
+
+El proyecto sigue una **Arquitectura en Capas (Clean Architecture)** similar a NestJS o Express bien estructurado:
+
+```
+┌─────────────────────────────────────────┐
+│         Capa de Presentación           │
+│      (Endpoints/Controladores)         │
+│    ✓ Manejo de HTTP Requests           │
+│    ✓ Validación de entrada (Pydantic)  │
+│    ✓ Serialización de respuesta        │
+└─────────────────────────────────────────┘
+                   ↓
+┌─────────────────────────────────────────┐
+│       Capa de Lógica de Negocio        │
+│            (Servicios)                  │
+│    ✓ Predicciones ML                    │
+│    ✓ Análisis personalizado             │
+│    ✓ Cálculos matemáticos               │
+└─────────────────────────────────────────┘
+                   ↓
+┌─────────────────────────────────────────┐
+│         Capa de Datos                   │
+│      (Modelos ML + Dataset)             │
+│    ✓ Modelo entrenado (.joblib)         │
+│    ✓ Scaler (.joblib)                   │
+│    ✓ Dataset de entrenamiento (.csv)    │
+└─────────────────────────────────────────┘
+```
+
+### Principios Aplicados
+
+1. **Separación de Responsabilidades**: Cada capa tiene una responsabilidad específica
+2. **Inyección de Dependencias**: Los servicios se inyectan en los controladores
+3. **DTOs (Data Transfer Objects)**: Contratos claros de entrada/salida con Pydantic
+4. **Singleton Pattern**: El modelo ML se carga una sola vez al inicio
+5. **Configuración Centralizada**: Todas las configuraciones en un solo lugar
+
+---
+
+## 📁 Estructura del Proyecto
+
+```
+academic-risk-predictor-backend/
+│
+├── app/                                    # 📦 Paquete principal de la aplicación
+│   ├── __init__.py
+│   ├── main.py                            # 🚀 Entry Point de FastAPI
+│   │
+│   ├── api/                               # 🌐 Capa de API (Controladores)
+│   │   └── v1/                           # Versión 1 del API
+│   │       └── endpoints/
+│   │           ├── __init__.py
+│   │           └── prediction.py         # Endpoints de predicción y chat
+│   │
+│   ├── core/                              # ⚙️ Configuración Core
+│   │   ├── __init__.py
+│   │   └── config.py                     # Settings y variables de entorno
+│   │
+│   ├── schemas/                           # 📋 DTOs (Pydantic Models)
+│   │   ├── __init__.py
+│   │   └── student.py                    # Schemas de estudiante
+│   │
+│   └── services/                          # 🧠 Lógica de Negocio
+│       ├── __init__.py
+│       └── ml_service.py                 # Servicio de Machine Learning
+│
+├── main.py                                # 🔧 Wrapper para compatibilidad
+├── requirements.txt                       # 📦 Dependencias Python
+├── env.example                            # ⚙️ Ejemplo de configuración
+│
+├── modelo_logistico.joblib               # 🤖 Modelo entrenado (generado)
+├── scaler.joblib                          # 📊 Scaler entrenado (generado)
+└── dataset_estudiantes_decimal.csv       # 📈 Dataset de entrenamiento
+```
+
+### Descripción de Componentes
+
+#### 📦 `app/main.py` - Entry Point
+- Configura la aplicación FastAPI
+- Registra middleware CORS
+- Incluye los routers
+- Define endpoints generales (`/`, `/health`)
+
+#### 🌐 `app/api/v1/endpoints/prediction.py` - Controladores
+- **POST /api/v1/predict**: Predicción de riesgo
+- **POST /api/v1/chat**: Chat con consejero virtual
+- Solo orquestación, sin lógica de negocio
+
+#### 📋 `app/schemas/student.py` - DTOs
+- `StudentInput`: Datos de entrada del estudiante
+- `PredictionOutput`: Respuesta de la predicción
+- `ChatInput/ChatOutput`: Datos del chat
+- Validación automática con Pydantic
+
+#### 🧠 `app/services/ml_service.py` - Servicio ML
+- Carga/entrenamiento del modelo
+- Predicciones
+- Análisis personalizado con IA
+- Cálculos matemáticos detallados
+- **Patrón Singleton**: Una sola instancia global
+
+#### ⚙️ `app/core/config.py` - Configuración
+- Manejo centralizado de configuraciones
+- Variables de entorno
+- Valores por defecto
+- Basado en Pydantic Settings
+
+---
+
+## 🚀 Instalación
+
+### 1. Clonar el Repositorio
 ```bash
-git clone https://github.com/TU_USUARIO/academic-risk-predictor-backend.git
+git clone <repository-url>
 cd academic-risk-predictor-backend
 ```
 
-### 2. Crear entorno virtual
-
+### 2. Crear Entorno Virtual
 ```bash
-python -m venv venv
-
-# Activar en Mac/Linux:
-source venv/bin/activate
-
-# Activar en Windows:
-venv\Scripts\activate
+python3 -m venv venv
+source venv/bin/activate  # En Windows: venv\Scripts\activate
 ```
 
-### 3. Instalar dependencias
-
+### 3. Instalar Dependencias
 ```bash
 pip install -r requirements.txt
 ```
 
-### 4. Ejecutar el servidor
-
+### 4. Configurar Variables de Entorno (Opcional)
 ```bash
-python main.py
+cp env.example .env
+# Editar .env según necesidades
 ```
 
-El servidor estará disponible en: **http://localhost:8000**
+---
 
-## 📡 Endpoints
+## ▶️ Ejecución
 
-### `GET /`
-Información general del API
+### Desarrollo
+```bash
+# Opción 1: Usando el archivo main.py de la raíz
+python main.py
 
-### `GET /health`
-Verificar estado del servicio
+# Opción 2: Usando uvicorn directamente
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
 
-**Respuesta:**
+### Producción
+```bash
+# Sin reload para mejor rendimiento
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+```
+
+### Docker (si aplica)
+```bash
+docker build -t academic-risk-predictor .
+docker run -p 8000:8000 academic-risk-predictor
+```
+
+---
+
+## 🔌 Endpoints Disponibles
+
+### 📍 General
+
+#### `GET /`
+Información del API y endpoints disponibles.
+
+#### `GET /health`
+Health check - Estado del servicio y modelo ML.
+
 ```json
 {
   "status": "healthy",
   "modelo_cargado": true,
-  "scaler_cargado": true
+  "scaler_cargado": true,
+  "version": "1.0.0"
 }
 ```
 
-### `POST /predict`
-Realizar predicción de riesgo académico
+---
 
-**Body:**
+### 📍 Predicción
+
+#### `POST /api/v1/predict`
+Realiza una predicción de riesgo académico.
+
+**Request Body:**
 ```json
 {
-  "promedio_asistencia": 85.0,
-  "promedio_seguimiento": 3.5,
-  "nota_parcial_1": 3.2,
-  "inicios_sesion_plataforma": 42,
-  "uso_tutorias": 1
+  "promedio_asistencia": 78.5,
+  "promedio_seguimiento": 3.1,
+  "nota_parcial_1": 2.8,
+  "inicios_sesion_plataforma": 45,
+  "uso_tutorias": 2
 }
 ```
 
-**Respuesta:**
+**Response:**
 ```json
 {
-  "probabilidad_riesgo": 0.35,
-  "porcentaje_riesgo": 35.0,
-  "nivel_riesgo": "BAJO",
-  "analisis_ia": "...",
-  "datos_radar": {...},
-  "detalles_matematicos": {...}
+  "probabilidad_riesgo": 0.65,
+  "porcentaje_riesgo": 65.0,
+  "nivel_riesgo": "MEDIO",
+  "analisis_ia": "⚠️ **SITUACIÓN DE RIESGO MODERADO**...",
+  "datos_radar": {
+    "labels": ["Asistencia (%)", "Seguimiento", "Parcial 1", "Logins", "Tutorías"],
+    "estudiante": [78.5, 3.1, 2.8, 45, 2],
+    "promedio_aprobado": [82.76, 3.40, 3.39, 39.06, 1.51]
+  },
+  "detalles_matematicos": {
+    "formula_logit": "z = β₀ + Σ(βᵢ × xᵢ)",
+    "valor_z": 0.619,
+    "coeficientes": [-0.35, 0.28, 0.52, 0.15, -0.22]
+  }
 }
 ```
 
-## 📚 Documentación Automática
+---
 
-Una vez iniciado el servidor, puedes acceder a:
+#### `POST /api/v1/chat`
+Chat con el consejero académico virtual.
+
+**Request Body:**
+```json
+{
+  "pregunta": "¿Cómo puedo mejorar mi nota?",
+  "datos_estudiante": {
+    "promedio_asistencia": 78.5,
+    "promedio_seguimiento": 3.1,
+    "nota_parcial_1": 2.8,
+    "inicios_sesion_plataforma": 45,
+    "uso_tutorias": 2
+  },
+  "prediccion_actual": {
+    "porcentaje_riesgo": 65.0
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "respuesta": "**💡 Cómo Mejorar Tu Rendimiento:**\n\n..."
+}
+```
+
+---
+
+## 📚 Documentación Interactiva
+
+Una vez iniciado el servidor, visita:
 
 - **Swagger UI**: http://localhost:8000/docs
 - **ReDoc**: http://localhost:8000/redoc
 
-## 🧠 Modelo de Machine Learning
+---
 
-### Algoritmo
-**Regresión Logística** con 5 variables predictoras:
+## 🛠️ Desarrollo
 
-1. Promedio de asistencia (0-100%)
-2. Promedio de seguimiento (0-5)
-3. Nota parcial 1 (0-5)
-4. Inicios de sesión en plataforma
-5. Uso de tutorías (0 o 1)
+### Agregar un Nuevo Endpoint
 
-### Fórmulas
+1. **Crear el schema en `app/schemas/`** (si es necesario)
+```python
+# app/schemas/new_feature.py
+from pydantic import BaseModel
 
-```
-z = β₀ + Σ(βᵢ × xᵢ_scaled)
-P(riesgo) = 1 / (1 + e^(-z))
+class NewFeatureInput(BaseModel):
+    field1: str
+    field2: int
 ```
 
-### Entrenamiento
+2. **Agregar lógica en `app/services/`** (si es necesario)
+```python
+# app/services/new_service.py
+class NewService:
+    def process(self, data):
+        # Lógica de negocio
+        return result
+```
 
-El modelo se entrena automáticamente la primera vez que ejecutas el servidor usando el dataset incluido (`dataset_estudiantes_decimal.csv`). Los archivos generados son:
+3. **Crear el endpoint en `app/api/v1/endpoints/`**
+```python
+# app/api/v1/endpoints/new_endpoint.py
+from fastapi import APIRouter
+router = APIRouter()
 
-- `modelo_logistico.joblib` - Modelo entrenado
-- `scaler.joblib` - Escalador StandardScaler
+@router.post("/new-feature")
+async def new_feature(data: NewFeatureInput):
+    # Orquestación
+    return result
+```
 
-## 🌐 Despliegue
+4. **Registrar el router en `app/main.py`**
+```python
+from app.api.v1.endpoints import new_endpoint
 
-### Render.com (Recomendado - Gratis)
+app.include_router(
+    new_endpoint.router,
+    prefix="/api/v1",
+    tags=["New Feature"]
+)
+```
 
-1. Crea una cuenta en [Render.com](https://render.com)
-2. Conecta tu repositorio de GitHub
-3. Crea un nuevo **Web Service**
-4. Configuración:
-   - **Build Command**: `pip install -r requirements.txt`
-   - **Start Command**: `python main.py`
-   - **Environment**: Python 3
-   
-### Railway.app
-
-1. Crea una cuenta en [Railway.app](https://railway.app)
-2. Conecta tu repositorio
-3. Railway detectará automáticamente Python
-4. Deploy automático
-
-### Variables de Entorno (Opcional)
-
+### Testing
 ```bash
-PORT=8000  # Puerto del servidor (por defecto 8000)
+# Instalar dependencias de testing
+pip install pytest pytest-cov httpx
+
+# Ejecutar tests
+pytest tests/ -v --cov=app
 ```
-
-## 🛠️ Tecnologías
-
-- **FastAPI** 0.121+ - Framework web moderno
-- **scikit-learn** 1.7+ - Machine Learning
-- **pandas** 2.3+ - Análisis de datos
-- **numpy** 2.3+ - Computación numérica
-- **uvicorn** 0.38+ - Servidor ASGI
-- **pydantic** 2.12+ - Validación de datos
-
-## 📦 Estructura del Proyecto
-
-```
-academic-risk-predictor-backend/
-├── main.py                          # API FastAPI
-├── requirements.txt                 # Dependencias
-├── dataset_estudiantes_decimal.csv  # Dataset de entrenamiento
-├── .gitignore                       # Archivos ignorados
-└── README.md                        # Este archivo
-```
-
-## 🤝 Contribuir
-
-1. Fork el proyecto
-2. Crea una rama (`git checkout -b feature/NuevaCaracteristica`)
-3. Commit tus cambios (`git commit -m 'Agrega nueva característica'`)
-4. Push a la rama (`git push origin feature/NuevaCaracteristica`)
-5. Abre un Pull Request
-
-## 📄 Licencia
-
-Este proyecto es de código abierto.
-
-## 🆘 Soporte
-
-¿Problemas? Abre un **Issue** en GitHub.
 
 ---
 
-**Desarrollado con ❤️ usando Python y Machine Learning**
+## 🌍 Despliegue
+
+### Railway / Render / Heroku
+
+1. Asegurarse de tener `Procfile`:
+```
+web: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+```
+
+2. Configurar variables de entorno en el panel del servicio
+
+3. Push al repositorio:
+```bash
+git push railway main  # o render/heroku
+```
+
+---
+
+## 📝 Notas Técnicas
+
+### ⚠️ Puntos Críticos
+
+1. **El Scaler**: Las variables están escaladas con `StandardScaler`. El modelo espera datos escalados.
+
+2. **Orden de Features**: El array de entrada debe mantener exactamente este orden:
+   - promedio_asistencia
+   - promedio_seguimiento
+   - nota_parcial_1
+   - inicios_sesion_plataforma
+   - uso_tutorias
+
+3. **Modelo Singleton**: El modelo se carga UNA SOLA VEZ al iniciar la app (patrón Singleton).
+
+4. **Entrenamiento Automático**: Si los archivos `.joblib` no existen, el sistema entrena el modelo automáticamente desde el CSV.
+
+---
+
+## 🤝 Contribución
+
+Para contribuir al proyecto:
+
+1. Fork el repositorio
+2. Crear una rama feature (`git checkout -b feature/AmazingFeature`)
+3. Commit cambios (`git commit -m 'Add some AmazingFeature'`)
+4. Push a la rama (`git push origin feature/AmazingFeature`)
+5. Abrir un Pull Request
+
+---
+
+## 📄 Licencia
+
+Proyecto Final - Semestre 2025-II
+
+---
+
+## 👨‍💻 Autor
+
+Desarrollado como proyecto final académico.
+
+---
+
+## 🔗 Enlaces Relacionados
+
+- [Documentación de FastAPI](https://fastapi.tiangolo.com/)
+- [Pydantic Documentation](https://docs.pydantic.dev/)
+- [Scikit-learn User Guide](https://scikit-learn.org/stable/user_guide.html)
 

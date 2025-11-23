@@ -11,9 +11,6 @@ env/
 ENV/
 .venv
 
-# Modelos entrenados (se generan automáticamente)
-ml_models/*.joblib
-
 # IDEs
 .vscode/
 .idea/
@@ -32,11 +29,19 @@ Thumbs.db
 .env
 .env.local
 
-# Distribution / packaging
+# Git
+.git/
+.gitignore
+
+# Backup
+backup/
+
+# Distribution
 dist/
 build/
 *.egg-info/
 
-# Backup (descomentar para no subir archivos viejos al repo)
-# backup/
+# Documentation (opcional, dependiendo si quieres incluirlos)
+DEPLOY.md
+REFACTORIZACION_COMPLETADA.md
 
