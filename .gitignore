@@ -40,6 +40,14 @@ build/
 # Backup (descomentar para no subir archivos viejos al repo)
 # backup/
 
+# Test
+.hypothesis/
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
 
 # Azure credentials (nunca subir al repo)
 AZURE_CREDENTIALS*.json
+

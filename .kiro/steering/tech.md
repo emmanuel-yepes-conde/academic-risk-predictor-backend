@@ -1,7 +1,7 @@
 # Tech Stack
 
 ## Stack Tecnológico
-- Backend: Python 3.12+ con FastAPI (Async REST API) + uvicorn (ASGI)
+- Backend: Python3 3.12+ con FastAPI (Async REST API) + uvicorn (ASGI)
 - Base de datos: PostgreSQL 16 (persistencia relacional)
 - Autenticación: Inicio de sesión seguro, con posibilidad de escalar a SSO con microsoft y google
 - Seguridad en tránsito: TLS 1.3; anonimización de identificadores en capa de inferencia
@@ -52,23 +52,23 @@
 
 ```bash
 # Instalar dependencias
-pip install -r requirements.txt
+pip3 install -r requirements.txt
 
 # Servidor de desarrollo
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+python3 -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 # Via wrapper raíz
-python main.py
+python3 main.py
 
 # Producción (multi-worker)
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
 
 # Docker
 docker build -t academic-risk-predictor .
 docker run -p 8000:8000 academic-risk-predictor
 
 # Tests
-pytest tests/ -v --cov=app
+python3 -m pytest tests/ -v --cov=app
 ```
 
 ## Documentación API (servidor corriendo)

@@ -7,7 +7,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
-from app.api.v1.endpoints import prediction
+from app.api.v1.endpoints import prediction, health, users
+from app.infrastructure.database import engine
 
 
 # ============================================================================
@@ -25,6 +26,9 @@ async def lifespan(app: FastAPI):
     print("\n" + "="*80)
     print("🚀 INICIANDO SISTEMA DE PREDICCIÓN DE RIESGO ACADÉMICO")
     print("="*80 + "\n")
+    # Inicializar el pool de conexiones a la base de datos
+    async with engine.connect():
+        pass
     print("✅ SISTEMA INICIADO Y LISTO PARA RECIBIR PETICIONES")
     print("="*80 + "\n")
     
@@ -33,6 +37,8 @@ async def lifespan(app: FastAPI):
     # Shutdown
     print("\n" + "="*80)
     print("👋 CERRANDO SISTEMA DE PREDICCIÓN DE RIESGO ACADÉMICO")
+    # Cerrar todas las conexiones del pool
+    await engine.dispose()
     print("="*80 + "\n")
 
 
@@ -67,6 +73,19 @@ app.include_router(
     tags=["Predicción"]
 )
 
+# Incluir endpoint de health check
+app.include_router(
+    health.router,
+    tags=["Health"]
+)
+
+# Incluir endpoints de usuarios
+app.include_router(
+    users.router,
+    prefix="/api/v1",
+    tags=["Usuarios"]
+)
+
 
 # ============================================================================
 # ENDPOINTS GENERALES
@@ -90,17 +109,4 @@ async def root():
         "proyecto": "Sistema de Predicción de Riesgo Académico - Semestre 2025-II"
     }
 
-
-@app.get("/health")
-async def health_check():
-    """Endpoint para verificar el estado del servicio"""
-    from app.services.ml_service import risk_service
-    
-    return {
-        "status": "healthy",
-        "modelo_cargado": risk_service.model is not None,
-        "scaler_cargado": risk_service.scaler is not None,
-        "promedio_aprobados_cargado": risk_service.promedio_estudiantes_aprobados is not None,
-        "version": settings.API_VERSION
-    }
 
