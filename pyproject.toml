@@ -1,3 +1,14 @@
+[project]
+name = "academic-risk-predictor"
+version = "1.0.0"
+requires-python = ">=3.12"
+
+[tool.taskipy.tasks]
+dev = "uvicorn app.main:app --reload --host 0.0.0.0 --port 8000"
+start = "uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4"
+test = "pytest tests/ -v --cov=app"
+migrate = "alembic upgrade head"
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]

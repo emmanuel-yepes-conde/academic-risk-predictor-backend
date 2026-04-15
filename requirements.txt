@@ -30,6 +30,7 @@ python-multipart==0.0.6
 
 # Utilidades
 python-dotenv==1.0.0
+taskipy>=1.13.0
 
 # Testing
 pytest>=8.0.0
