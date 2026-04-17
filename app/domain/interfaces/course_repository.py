@@ -24,3 +24,16 @@ class ICourseRepository(ABC):
 
     @abstractmethod
     async def listar_estudiantes_inscritos(self, course_id: UUID) -> list[User]: ...
+
+    @abstractmethod
+    async def listar_por_programa(self, program_id: UUID) -> list[Course]: ...
+
+    @abstractmethod
+    async def listar_por_universidad_y_programa(
+        self, university_id: UUID, program_id: UUID
+    ) -> list[Course]: ...
+
+    @abstractmethod
+    async def listar_por_campus_y_programa(
+        self, campus_id: UUID, program_id: UUID
+    ) -> list[Course]: ...

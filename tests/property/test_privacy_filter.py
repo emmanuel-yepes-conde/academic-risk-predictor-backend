@@ -24,6 +24,8 @@ from app.domain.enums import RoleEnum
 from app.infrastructure.models.course import Course
 from app.infrastructure.models.enrollment import Enrollment
 from app.infrastructure.models.professor_course import ProfessorCourse
+from app.infrastructure.models.program import Program
+from app.infrastructure.models.university import University
 from app.infrastructure.models.user import User
 from app.infrastructure.repositories.user_repository import UserRepository
 
@@ -35,6 +37,8 @@ from app.infrastructure.repositories.user_repository import UserRepository
 # ---------------------------------------------------------------------------
 
 _TABLES = [
+    University.__table__,
+    Program.__table__,
     User.__table__,
     Course.__table__,
     Enrollment.__table__,
@@ -115,8 +119,41 @@ def _make_user(role: RoleEnum, index: int) -> User:
     )
 
 
-def _make_course() -> Course:
-    """Create a Course ORM instance."""
+def _make_university() -> University:
+    """Create a University ORM instance."""
+    uid = uuid.uuid4()
+    return University(
+        id=uid,
+        name="Test University",
+        code=f"TU{uid.hex[:6].upper()}",
+        country="Colombia",
+        city="Bogotá",
+        active=True,
+        created_at=_now(),
+    )
+
+
+def _make_program(university_id: uuid.UUID) -> Program:
+    """Create a Program ORM instance linked to a university."""
+    uid = uuid.uuid4()
+    return Program(
+        id=uid,
+        campus_id=uuid.uuid4(),
+        university_id=university_id,
+        institution="USBCO",
+        degree_type="PREG",
+        program_code=f"P{uid.hex[:6].upper()}",
+        program_name="Test Program",
+        pensum=f"PEN{uid.hex[:8]}",
+        academic_group="MFPSI",
+        location="SAN BENITO",
+        snies_code=int(uid.int % 100000),
+        created_at=_now(),
+    )
+
+
+def _make_course(program_id: uuid.UUID) -> Course:
+    """Create a Course ORM instance linked to a program."""
     uid = uuid.uuid4()
     return Course(
         id=uid,
@@ -124,6 +161,7 @@ def _make_course() -> Course:
         name="Test Course",
         credits=3,
         academic_period="2025-I",
+        program_id=program_id,
         created_at=_now(),
     )
 
@@ -158,8 +196,16 @@ async def test_professor_only_sees_enrolled_students(
         professor = _make_user(RoleEnum.PROFESSOR, 0)
         session.add(professor)
 
-        # 2. Create a course and assign it to the professor
-        course = _make_course()
+        # 2. Create a university, program, course and assign it to the professor
+        university = _make_university()
+        session.add(university)
+        session.flush()
+
+        program = _make_program(university.id)
+        session.add(program)
+        session.flush()
+
+        course = _make_course(program.id)
         session.add(course)
 
         professor_course = ProfessorCourse(

@@ -4,6 +4,7 @@ Centraliza todas las configuraciones y variables de entorno
 """
 
 import os
+import uuid
 from typing import List, Union, Annotated, Optional
 from pydantic_settings import BaseSettings
 from pydantic import Field, BeforeValidator, model_validator
@@ -78,6 +79,18 @@ class Settings(BaseSettings):
     DB_PORT: int = Field(default=5432, description="Puerto de la base de datos")
     DB_NAME: str = Field(default="mpra_db", description="Nombre de la base de datos")
     DATABASE_URL: Optional[str] = Field(default=None, description="URL de conexión a la base de datos")
+
+    # Universidad por defecto para migración de datos existentes
+    DEFAULT_UNIVERSITY_ID: uuid.UUID | None = Field(
+        default=None,
+        description="UUID de la universidad por defecto para migración de datos existentes"
+    )
+
+    # Configuración JWT
+    JWT_SECRET_KEY: str = Field(..., description="Clave secreta para firmar tokens JWT")
+    JWT_ALGORITHM: str = Field(default="HS256", description="Algoritmo de firma JWT")
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=30, description="Tiempo de expiración del access token en minutos")
+    REFRESH_TOKEN_EXPIRE_DAYS: int = Field(default=7, description="Tiempo de expiración del refresh token en días")
 
     # Pool de conexiones
     DB_POOL_MIN: int = Field(default=5, description="Tamaño mínimo del pool de conexiones")

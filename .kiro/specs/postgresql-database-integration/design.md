@@ -130,26 +130,34 @@ app/
 │       ├── user_repository.py
 │       ├── course_repository.py
 │       ├── audit_log_repository.py
-│       └── consent_repository.py
+│       ├── consent_repository.py
+│       ├── program_repository.py       # NUEVO
+│       └── student_profile_repository.py  # NUEVO
 ├── infrastructure/
 │   ├── database.py            # engine, AsyncSession, get_session
 │   ├── models/
-│   │   ├── user.py            # ORM: User
-│   │   ├── course.py          # ORM: Course
+│   │   ├── user.py            # ORM: User (+ institutional_email)
+│   │   ├── course.py          # ORM: Course (+ program_id FK)
 │   │   ├── enrollment.py      # ORM: Enrollment
 │   │   ├── professor_course.py
 │   │   ├── audit_log.py       # ORM: AuditLog
-│   │   └── consent.py         # ORM: Consent
+│   │   ├── consent.py         # ORM: Consent
+│   │   ├── program.py         # ORM: Program (NUEVO)
+│   │   └── student_profile.py # ORM: StudentProfile (NUEVO)
 │   └── repositories/
 │       ├── user_repository.py
 │       ├── course_repository.py
 │       ├── audit_log_repository.py
-│       └── consent_repository.py
+│       ├── consent_repository.py
+│       ├── program_repository.py       # NUEVO
+│       └── student_profile_repository.py  # NUEVO
 ├── application/
 │   ├── schemas/               # Pydantic DTOs (entrada/salida API)
 │   │   ├── user.py
 │   │   ├── course.py
-│   │   └── consent.py
+│   │   ├── consent.py
+│   │   ├── program.py         # NUEVO
+│   │   └── student_profile.py # NUEVO
 │   └── services/
 │       ├── auth_service.py
 │       ├── ml_service.py      # Ampliado con verificación de consentimiento
@@ -166,7 +174,9 @@ alembic/
 ├── env.py
 ├── script.py.mako
 └── versions/
-    └── 0001_initial_schema.py
+    ├── 0001_initial_schema.py
+    ├── 0002_add_user_status.py
+    └── 0003_add_programs_and_student_profiles.py  # NUEVO
 ```
 
 ### Interfaces de repositorio (Dominio)
@@ -231,12 +241,53 @@ erDiagram
     USER {
         uuid id PK
         string email UK
+        string institutional_email UK "Correo_E — correo institucional USBCO"
         string full_name
         string role
         string microsoft_oid UK
         string google_oid UK
         string password_hash
         bool ml_consent
+        string status
+        datetime created_at
+        datetime updated_at
+    }
+
+    PROGRAM {
+        uuid id PK
+        string institution "Institución (ej. USBCO)"
+        string campus "Campus (ej. USBME)"
+        string degree_type "Grado (ej. PREG)"
+        string program_code UK "Prog_Acad (ej. M0200)"
+        string program_name "Nombre_Programa"
+        string pensum "Pensum"
+        string academic_group "Gp_Acad"
+        string location "Ubicación_Prog"
+        int snies_code UK "Código_SNIES"
+        datetime created_at
+    }
+
+    STUDENT_PROFILE {
+        uuid id PK
+        uuid user_id FK UK "1-a-1 con users"
+        string student_institutional_id UK "ID_Estud"
+        string document_type "Tp_Doc_ID (CC, TI, CE)"
+        string document_number "Doc_ID"
+        date birth_date "Fecha_Nac"
+        string gender "Sexo (M/F)"
+        string phone "Teléfono"
+        int socioeconomic_stratum "Estrato_SocEcon (1-6)"
+        int academic_cycle "Ciclo_Lvo"
+        int academic_year "Año_Acad"
+        int semester "Semestre"
+        string program_action "Acc_Prog"
+        string enrollment_status "Estado (AC, ...)"
+        decimal enrolled_credits "Cred_Matric"
+        decimal other_credits "Cred_Otro_Curso"
+        int academic_level "Nivel"
+        string cohort "Cohorte"
+        string action_reason "Mvo_Acción"
+        uuid program_id FK "FK → programs.id"
         datetime created_at
         datetime updated_at
     }
@@ -247,6 +298,7 @@ erDiagram
         string name
         int credits
         string academic_period
+        uuid program_id FK "FK → programs.id (nullable)"
         datetime created_at
     }
 
@@ -288,6 +340,9 @@ erDiagram
     COURSE ||--o{ PROFESSOR_COURSE : "course_id"
     USER ||--o{ AUDIT_LOG : "user_id"
     USER ||--o| CONSENT : "student_id"
+    USER ||--o| STUDENT_PROFILE : "user_id"
+    PROGRAM ||--o{ STUDENT_PROFILE : "program_id"
+    PROGRAM ||--o{ COURSE : "program_id"
 ```
 
 ### Modelos ORM SQLModel
@@ -304,12 +359,98 @@ class User(SQLModel, table=True):
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     email: str = Field(unique=True, nullable=False, index=True)
+    institutional_email: str | None = Field(
+        default=None, unique=True, nullable=True, index=True
+    )  # Correo_E — correo institucional USBCO (ej. PIPE@TAU.USBMED.EDU.CO)
     full_name: str = Field(nullable=False)
     role: RoleEnum = Field(nullable=False)
     microsoft_oid: str | None = Field(default=None, unique=True, nullable=True)
     google_oid: str | None = Field(default=None, unique=True, nullable=True)
     password_hash: str | None = Field(default=None, nullable=True)
     ml_consent: bool = Field(default=False)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+```
+
+```python
+# app/infrastructure/models/course.py
+import uuid
+from datetime import datetime, timezone
+from sqlmodel import SQLModel, Field
+
+class Course(SQLModel, table=True):
+    __tablename__ = "courses"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    code: str = Field(unique=True, nullable=False, index=True)
+    name: str = Field(nullable=False)
+    credits: int = Field(nullable=False)
+    academic_period: str = Field(nullable=False)
+    program_id: uuid.UUID | None = Field(
+        default=None, foreign_key="programs.id", nullable=True
+    )  # FK → programs.id; nullable para cursos sin programa asignado
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+```
+
+```python
+# app/infrastructure/models/program.py  (NUEVO)
+import uuid
+from datetime import datetime, timezone
+from sqlmodel import SQLModel, Field
+
+class Program(SQLModel, table=True):
+    __tablename__ = "programs"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    institution: str = Field(nullable=False)           # Institución (ej. USBCO)
+    campus: str = Field(nullable=False)                # Campus (ej. USBME)
+    degree_type: str = Field(nullable=False)           # Grado (ej. PREG)
+    program_code: str = Field(unique=True, nullable=False, index=True)  # Prog_Acad (ej. M0200)
+    program_name: str = Field(nullable=False)          # Nombre_Programa
+    pensum: str = Field(nullable=False)                # Pensum (ej. M20020142)
+    academic_group: str = Field(nullable=False)        # Gp_Acad (ej. MFPSI)
+    location: str = Field(nullable=False)              # Ubicación_Prog (ej. SAN BENITO)
+    snies_code: int = Field(unique=True, nullable=False, index=True)  # Código_SNIES (ej. 1361)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+```
+
+```python
+# app/infrastructure/models/student_profile.py  (NUEVO)
+import uuid
+from datetime import date, datetime, timezone
+from decimal import Decimal
+from sqlmodel import SQLModel, Field
+
+class StudentProfile(SQLModel, table=True):
+    __tablename__ = "student_profiles"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    user_id: uuid.UUID = Field(
+        foreign_key="users.id", unique=True, nullable=False, index=True
+    )  # Relación 1-a-1 con users
+    student_institutional_id: str = Field(
+        unique=True, nullable=False, index=True
+    )  # ID_Estud (ej. 30000032391)
+    document_type: str = Field(nullable=False)         # Tp_Doc_ID (CC, TI, CE, ...)
+    document_number: str = Field(nullable=False)       # Doc_ID
+    birth_date: date | None = Field(default=None, nullable=True)       # Fecha_Nac
+    gender: str | None = Field(default=None, nullable=True)            # Sexo (M/F)
+    phone: str | None = Field(default=None, nullable=True)             # Teléfono
+    socioeconomic_stratum: int | None = Field(default=None, nullable=True)  # Estrato_SocEcon (1-6)
+    # Campos de período de inscripción (enrollment-period fields)
+    academic_cycle: int | None = Field(default=None, nullable=True)    # Ciclo_Lvo
+    academic_year: int | None = Field(default=None, nullable=True)     # Año_Acad
+    semester: int | None = Field(default=None, nullable=True)          # Semestre
+    program_action: str | None = Field(default=None, nullable=True)    # Acc_Prog (ej. RLOA)
+    enrollment_status: str | None = Field(default=None, nullable=True) # Estado (ej. AC)
+    enrolled_credits: Decimal | None = Field(default=None, nullable=True)  # Cred_Matric
+    other_credits: Decimal | None = Field(default=None, nullable=True)     # Cred_Otro_Curso
+    academic_level: int | None = Field(default=None, nullable=True)    # Nivel
+    cohort: str | None = Field(default=None, nullable=True)            # Cohorte
+    action_reason: str | None = Field(default=None, nullable=True)     # Mvo_Acción
+    program_id: uuid.UUID | None = Field(
+        default=None, foreign_key="programs.id", nullable=True
+    )  # FK → programs.id
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 ```
@@ -356,7 +497,154 @@ class OperationEnum(str, Enum):
     DELETE = "DELETE"
 ```
 
-### Estrategia de auditoría atómica
+### Migración `0003_add_programs_and_student_profiles`
+
+Esta migración agrega las tablas `programs` y `student_profiles`, y extiende `users` y `courses` con las nuevas columnas para alinear el esquema con los datos institucionales reales de USBCO.
+
+```python
+# alembic/versions/0003_add_programs_and_student_profiles.py
+"""add_programs_and_student_profiles
+
+Revision ID: 0003
+Revises: 0002
+Create Date: 2025-01-01 00:00:00.000000
+"""
+from typing import Sequence, Union
+import sqlalchemy as sa
+import sqlmodel
+from alembic import op
+from sqlalchemy.dialects import postgresql
+
+revision: str = "0003"
+down_revision: Union[str, None] = "0002"
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
+
+
+def upgrade() -> None:
+    # --- programs ---
+    op.create_table(
+        "programs",
+        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("institution", sqlmodel.AutoString(), nullable=False),
+        sa.Column("campus", sqlmodel.AutoString(), nullable=False),
+        sa.Column("degree_type", sqlmodel.AutoString(), nullable=False),
+        sa.Column("program_code", sqlmodel.AutoString(), nullable=False),
+        sa.Column("program_name", sqlmodel.AutoString(), nullable=False),
+        sa.Column("pensum", sqlmodel.AutoString(), nullable=False),
+        sa.Column("academic_group", sqlmodel.AutoString(), nullable=False),
+        sa.Column("location", sqlmodel.AutoString(), nullable=False),
+        sa.Column("snies_code", sa.Integer(), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("program_code"),
+        sa.UniqueConstraint("snies_code"),
+    )
+    op.create_index(op.f("ix_programs_program_code"), "programs", ["program_code"], unique=True)
+    op.create_index(op.f("ix_programs_snies_code"), "programs", ["snies_code"], unique=True)
+
+    # --- student_profiles ---
+    op.create_table(
+        "student_profiles",
+        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("student_institutional_id", sqlmodel.AutoString(), nullable=False),
+        sa.Column("document_type", sqlmodel.AutoString(), nullable=False),
+        sa.Column("document_number", sqlmodel.AutoString(), nullable=False),
+        sa.Column("birth_date", sa.Date(), nullable=True),
+        sa.Column("gender", sqlmodel.AutoString(), nullable=True),
+        sa.Column("phone", sqlmodel.AutoString(), nullable=True),
+        sa.Column("socioeconomic_stratum", sa.Integer(), nullable=True),
+        sa.Column("academic_cycle", sa.Integer(), nullable=True),
+        sa.Column("academic_year", sa.Integer(), nullable=True),
+        sa.Column("semester", sa.Integer(), nullable=True),
+        sa.Column("program_action", sqlmodel.AutoString(), nullable=True),
+        sa.Column("enrollment_status", sqlmodel.AutoString(), nullable=True),
+        sa.Column("enrolled_credits", sa.Numeric(precision=5, scale=2), nullable=True),
+        sa.Column("other_credits", sa.Numeric(precision=5, scale=2), nullable=True),
+        sa.Column("academic_level", sa.Integer(), nullable=True),
+        sa.Column("cohort", sqlmodel.AutoString(), nullable=True),
+        sa.Column("action_reason", sqlmodel.AutoString(), nullable=True),
+        sa.Column("program_id", postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
+        sa.ForeignKeyConstraint(["program_id"], ["programs.id"]),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("user_id"),
+        sa.UniqueConstraint("student_institutional_id"),
+    )
+    op.create_index(op.f("ix_student_profiles_user_id"), "student_profiles", ["user_id"], unique=True)
+    op.create_index(op.f("ix_student_profiles_student_institutional_id"), "student_profiles", ["student_institutional_id"], unique=True)
+
+    # --- users: agregar institutional_email ---
+    op.add_column(
+        "users",
+        sa.Column("institutional_email", sqlmodel.AutoString(), nullable=True),
+    )
+    op.create_unique_constraint("uq_users_institutional_email", "users", ["institutional_email"])
+    op.create_index(op.f("ix_users_institutional_email"), "users", ["institutional_email"], unique=True)
+
+    # --- courses: agregar program_id ---
+    op.add_column(
+        "courses",
+        sa.Column("program_id", postgresql.UUID(as_uuid=True), nullable=True),
+    )
+    op.create_foreign_key("fk_courses_program_id", "courses", "programs", ["program_id"], ["id"])
+
+
+def downgrade() -> None:
+    op.drop_constraint("fk_courses_program_id", "courses", type_="foreignkey")
+    op.drop_column("courses", "program_id")
+    op.drop_index(op.f("ix_users_institutional_email"), table_name="users")
+    op.drop_constraint("uq_users_institutional_email", "users", type_="unique")
+    op.drop_column("users", "institutional_email")
+    op.drop_index(op.f("ix_student_profiles_student_institutional_id"), table_name="student_profiles")
+    op.drop_index(op.f("ix_student_profiles_user_id"), table_name="student_profiles")
+    op.drop_table("student_profiles")
+    op.drop_index(op.f("ix_programs_snies_code"), table_name="programs")
+    op.drop_index(op.f("ix_programs_program_code"), table_name="programs")
+    op.drop_table("programs")
+```
+
+### Mapeo de campos USBCO → esquema
+
+| Campo USBCO | Tabla destino | Columna |
+|---|---|---|
+| `Correo_Electronico` | `users` | `email` (campo de auth existente) |
+| `Correo_E` | `users` | `institutional_email` (nuevo) |
+| `ID_Estud` | `student_profiles` | `student_institutional_id` |
+| `Tp_Doc_ID` | `student_profiles` | `document_type` |
+| `Doc_ID` | `student_profiles` | `document_number` |
+| `Nombre` | `users` | `full_name` (existente) |
+| `Fecha_Nac` | `student_profiles` | `birth_date` |
+| `Edad` | — | Calculado desde `birth_date`; no persistido |
+| `Sexo` | `student_profiles` | `gender` |
+| `Teléfono` | `student_profiles` | `phone` |
+| `Estrato_SocEcon` | `student_profiles` | `socioeconomic_stratum` |
+| `Ciclo_Lvo` | `student_profiles` | `academic_cycle` |
+| `Año_Acad` | `student_profiles` | `academic_year` |
+| `Semestre` | `student_profiles` | `semester` |
+| `Acc_Prog` | `student_profiles` | `program_action` |
+| `Estado` | `student_profiles` | `enrollment_status` |
+| `Cred_Matric` | `student_profiles` | `enrolled_credits` |
+| `Cred_Otro_Curso` | `student_profiles` | `other_credits` |
+| `Nivel` | `student_profiles` | `academic_level` |
+| `Cohorte` | `student_profiles` | `cohort` |
+| `Mvo_Acción` | `student_profiles` | `action_reason` |
+| `Institución` | `programs` | `institution` |
+| `Campus` | `programs` | `campus` |
+| `Grado` | `programs` | `degree_type` |
+| `Prog_Acad` | `programs` | `program_code` |
+| `Nombre_Programa` | `programs` | `program_name` |
+| `Pensum` | `programs` | `pensum` |
+| `Gp_Acad` | `programs` | `academic_group` |
+| `Ubicación_Prog` | `programs` | `location` |
+| `Código_SNIES` | `programs` | `snies_code` |
+
+> **Nota de diseño:** El campo `Edad` no se persiste porque es derivable de `birth_date` y su valor cambia con el tiempo. Se calcula en la capa de aplicación cuando se necesita.
+
+---
 
 Cada repositorio que realiza escrituras (`UserRepository`, `CourseRepository`, `ConsentRepository`) invoca `AuditLogRepository.register` **dentro de la misma `AsyncSession`** antes del `commit`. Esto garantiza que si la operación principal falla, el log de auditoría también se revierte (atomicidad por transacción).
 
@@ -539,6 +827,30 @@ Cada test de propiedad incluye un comentario con el formato:
 
 ---
 
+### Propiedad 12: Round trip de Program (create → get)
+
+*Para cualquier* instancia válida de `Program` creada mediante `ProgramRepository.create`, consultarla inmediatamente por `program_code` o `snies_code` debe retornar una entidad con los mismos valores que la entidad creada. Además, intentar crear un segundo `Program` con el mismo `program_code` o `snies_code` debe resultar en un error de integridad.
+
+**Validates: Requirements 4.1** *(extensión para tabla `programs`)*
+
+---
+
+### Propiedad 13: Round trip de StudentProfile (create → get) y unicidad 1-a-1
+
+*Para cualquier* instancia válida de `StudentProfile` creada mediante `StudentProfileRepository.create`, consultarla por `user_id` o `student_institutional_id` debe retornar una entidad con los mismos valores. Intentar crear un segundo `StudentProfile` con el mismo `user_id` o el mismo `student_institutional_id` debe resultar en un error de integridad, garantizando la relación 1-a-1 entre `users` y `student_profiles`.
+
+**Validates: Requirements 4.1** *(extensión para tabla `student_profiles`)*
+
+---
+
+### Propiedad 14: Unicidad de institutional_email en users
+
+*Para cualquier* par de usuarios con el mismo valor no-nulo de `institutional_email`, intentar persistir el segundo debe resultar en un error de integridad. Para cualquier usuario con `institutional_email` definido, consultarlo por ese campo debe retornar exactamente ese usuario.
+
+**Validates: Requirements 4.1** *(extensión del campo `institutional_email` en `users`)*
+
+---
+
 ## Estrategia de Testing (detalle)
 
 ### Tests unitarios
@@ -644,7 +956,9 @@ tests/
 │   ├── test_user_repository.py
 │   ├── test_course_repository.py
 │   ├── test_audit_log_repository.py
-│   └── test_consent_repository.py
+│   ├── test_consent_repository.py
+│   ├── test_program_repository.py          # NUEVO
+│   └── test_student_profile_repository.py  # NUEVO
 └── property/
     ├── test_url_construction.py    # Propiedad 1
     ├── test_session_rollback.py    # Propiedad 2
@@ -656,5 +970,8 @@ tests/
     ├── test_privacy_filter.py      # Propiedad 8
     ├── test_consent_gate.py        # Propiedad 9
     ├── test_consent_immutability.py # Propiedad 10
-    └── test_health_check.py        # Propiedad 11
+    ├── test_health_check.py        # Propiedad 11
+    ├── test_program_roundtrip.py   # Propiedad 12 (NUEVO)
+    ├── test_student_profile_roundtrip.py  # Propiedad 13 (NUEVO)
+    └── test_institutional_email.py # Propiedad 14 (NUEVO)
 ```

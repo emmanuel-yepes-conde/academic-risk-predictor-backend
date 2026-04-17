@@ -3,7 +3,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class CourseCreate(BaseModel):
@@ -11,6 +11,7 @@ class CourseCreate(BaseModel):
     name: str
     credits: int
     academic_period: str
+    program_id: UUID = Field(..., description="ID del programa al que pertenece el curso")
 
 
 class CourseRead(BaseModel):

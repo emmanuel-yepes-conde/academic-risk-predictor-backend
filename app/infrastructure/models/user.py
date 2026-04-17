@@ -3,8 +3,9 @@ Modelo ORM SQLModel para la entidad User.
 """
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
+import sqlalchemy as sa
 from sqlmodel import Field, SQLModel
 
 from app.domain.enums import RoleEnum, UserStatusEnum
@@ -15,6 +16,9 @@ class User(SQLModel, table=True):
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     email: str = Field(unique=True, nullable=False, index=True)
+    institutional_email: str | None = Field(
+        default=None, unique=True, nullable=True, index=True
+    )  # Correo_E — correo institucional USBCO (ej. PIPE@TAU.USBMED.EDU.CO)
     full_name: str = Field(nullable=False)
     role: RoleEnum = Field(nullable=False)
     microsoft_oid: str | None = Field(default=None, unique=True, nullable=True)
@@ -27,8 +31,10 @@ class User(SQLModel, table=True):
         sa_column_kwargs={"server_default": "ACTIVE"},
     )
     created_at: datetime = Field(
-        default_factory=lambda: datetime.utcnow()
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
     )
     updated_at: datetime = Field(
-        default_factory=lambda: datetime.utcnow()
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
     )

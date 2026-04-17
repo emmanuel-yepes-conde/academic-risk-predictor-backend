@@ -5,6 +5,7 @@ RB-04 privacy filter applied when professor_id is provided.
 """
 
 from datetime import datetime, timezone
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import Select, func, select
@@ -69,6 +70,20 @@ class UserRepository(IUserRepository):
             operation=OperationEnum.INSERT,
             record_id=new_user.id,
             new_data=user.model_dump(),
+        ))
+        return new_user
+
+    async def create_from_dict(self, data: dict[str, Any]) -> User:
+        """Create a user from a pre-processed dict (password already hashed)."""
+        new_user = User(**data)
+        self._session.add(new_user)
+        await self._session.flush()
+        await self._session.refresh(new_user)
+        await self._audit.register(AuditLogCreate(
+            table_name="users",
+            operation=OperationEnum.INSERT,
+            record_id=new_user.id,
+            new_data={k: v for k, v in data.items() if k != "password_hash"},
         ))
         return new_user
 

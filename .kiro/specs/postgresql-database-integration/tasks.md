@@ -244,3 +244,66 @@ Integración de PostgreSQL 16 como capa de persistencia del backend FastAPI del 
 - Los repositorios reciben `AsyncSession` por inyección de dependencias (nunca la crean internamente)
 - La auditoría es atómica: `AuditLogRepository.register` se invoca dentro de la misma sesión que la operación principal
 - El filtro RB-04 se aplica en la capa de datos (repositorio), no solo en la capa API
+
+- [x] 18. Agregar `institutional_email` al modelo User y migración
+  - Agregar campo `institutional_email: str | None` (unique, nullable, index=True) al modelo `app/infrastructure/models/user.py`
+  - Crear migración `alembic/versions/0003_add_programs_and_student_profiles.py` con:
+    - `upgrade()`: crear tabla `programs`, crear tabla `student_profiles`, agregar columna `institutional_email` a `users`, agregar columna `program_id` a `courses` con FK → programs.id
+    - `downgrade()`: revertir todos los cambios en orden inverso
+  - Actualizar `UserRepository` para incluir `institutional_email` en create/update
+  - _Requisitos: 4.1_
+
+  - [ ]* 18.1 Test de propiedad — Propiedad 14: Unicidad de `institutional_email` en `users`
+    - **Propiedad 14: Unicidad de `institutional_email` en `users`**
+    - Crear `tests/property/test_institutional_email.py`
+    - Verificar que dos usuarios con el mismo `institutional_email` no-nulo generan `IntegrityError`
+    - `# Feature: postgresql-database-integration, Property 14: institutional_email uniqueness`
+    - **Valida: Requisitos 4.1**
+
+- [ ] 19. Implementar modelo ORM `Program` y repositorio
+  - Crear `app/infrastructure/models/program.py` con campos: `id` (UUID PK), `institution`, `campus`, `degree_type`, `program_code` (unique, index), `program_name`, `pensum`, `academic_group`, `location`, `snies_code` (int, unique, index), `created_at`
+  - Crear `app/domain/interfaces/program_repository.py` con `IProgramRepository(ABC)`: métodos `create`, `get_by_id`, `get_by_program_code`, `get_by_snies_code`, `list`
+  - Crear `app/infrastructure/repositories/program_repository.py` implementando `IProgramRepository`
+  - Crear `app/application/schemas/program.py`: `ProgramCreate`, `ProgramRead`
+  - Agregar `program_id: uuid.UUID | None` (FK → programs.id, nullable) al modelo `app/infrastructure/models/course.py`
+  - _Requisitos: 4.2, 6.2_
+
+  - [ ]* 19.1 Test de propiedad — Propiedad 12: Round trip de `Program` (create → get)
+    - **Propiedad 12: Round trip de `Program` (create → get)**
+    - Crear `tests/property/test_program_roundtrip.py`
+    - Usar `@given` con campos de programa generados aleatoriamente
+    - Verificar que `get_by_program_code` retorna los mismos valores que se pasaron a `create`
+    - Verificar que `program_code` y `snies_code` duplicados generan `IntegrityError`
+    - `# Feature: postgresql-database-integration, Property 12: Program round trip`
+    - **Valida: Requisitos 4.2, 6.2**
+
+  - [ ]* 19.2 Test de integración de `ProgramRepository`
+    - Crear `tests/integration/test_program_repository.py`
+    - Cubrir: crear programa, obtener por código, obtener por SNIES, código duplicado → `IntegrityError`
+    - _Requisitos: 4.2, 6.2_
+
+- [ ] 20. Implementar modelo ORM `StudentProfile` y repositorio
+  - Crear `app/infrastructure/models/student_profile.py` con todos los campos del diseño: `id`, `user_id` (FK users, unique), `student_institutional_id` (unique, index), `document_type`, `document_number`, `birth_date` (date, nullable), `gender` (nullable), `phone` (nullable), `socioeconomic_stratum` (int, nullable), `academic_cycle` (int, nullable), `academic_year` (int, nullable), `semester` (int, nullable), `program_action` (nullable), `enrollment_status` (nullable), `enrolled_credits` (Decimal, nullable), `other_credits` (Decimal, nullable), `academic_level` (int, nullable), `cohort` (nullable), `action_reason` (nullable), `program_id` (FK programs, nullable), `created_at`, `updated_at`
+  - Crear `app/domain/interfaces/student_profile_repository.py` con `IStudentProfileRepository(ABC)`: métodos `create`, `get_by_user_id`, `get_by_student_institutional_id`, `update`
+  - Crear `app/infrastructure/repositories/student_profile_repository.py` implementando `IStudentProfileRepository`; cada escritura invoca `AuditLogRepository.register` en la misma sesión
+  - Crear `app/application/schemas/student_profile.py`: `StudentProfileCreate`, `StudentProfileUpdate`, `StudentProfileRead`
+  - _Requisitos: 4.1, 6.1, 6.5, 9.1_
+
+  - [ ]* 20.1 Test de propiedad — Propiedad 13: Round trip de `StudentProfile` (create → get) y unicidad 1-a-1
+    - **Propiedad 13: Round trip de `StudentProfile` (create → get) y unicidad 1-a-1**
+    - Crear `tests/property/test_student_profile_roundtrip.py`
+    - Verificar que `get_by_user_id` retorna los mismos valores que se pasaron a `create`
+    - Verificar que `user_id` duplicado genera `IntegrityError` (relación 1-a-1)
+    - Verificar que `student_institutional_id` duplicado genera `IntegrityError`
+    - `# Feature: postgresql-database-integration, Property 13: StudentProfile round trip`
+    - **Valida: Requisitos 4.1, 6.1**
+
+  - [ ]* 20.2 Test de integración de `StudentProfileRepository`
+    - Crear `tests/integration/test_student_profile_repository.py`
+    - Cubrir: crear perfil, obtener por user_id, obtener por student_institutional_id, user_id duplicado → `IntegrityError`, actualizar perfil
+    - _Requisitos: 4.1, 6.1, 6.5_
+
+- [ ] 21. Checkpoint final — Verificar que todos los tests nuevos pasan
+  - Ejecutar `pytest tests/ -v --cov=app` y asegurarse de que todos los tests pasan incluyendo los nuevos de las tareas 18–20
+  - Verificar que la migración `0003` aplica y revierte correctamente con `alembic upgrade head` y `alembic downgrade -1`
+  - Consultar al usuario si surgen dudas.

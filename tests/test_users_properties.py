@@ -584,7 +584,7 @@ async def test_nonexistent_uuid_returns_404(client, random_uuid: uuid.UUID):
         email=st.emails(),
         full_name=st.text(min_size=1),
         role=st.sampled_from(RoleEnum),
-        password_hash=st.text(min_size=1),
+        password=st.text(min_size=1),
     )
 )
 async def test_password_hash_never_in_response(client, user_data: UserCreate):
@@ -632,7 +632,7 @@ async def test_password_hash_never_in_response(client, user_data: UserCreate):
                 "email": user_data.email,
                 "full_name": user_data.full_name,
                 "role": user_data.role.value,
-                "password_hash": user_data.password_hash,
+                "password": user_data.password,
             },
         )
         get_resp = await client.get(f"/api/v1/users/{user_id}")

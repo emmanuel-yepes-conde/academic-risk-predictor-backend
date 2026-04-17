@@ -4,10 +4,17 @@ Entry Point de la aplicación FastAPI
 """
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from app.core.config import settings
-from app.api.v1.endpoints import prediction, health, users
+from app.api.v1.endpoints import campuses, prediction, health, users, universities, auth
+from app.domain.exceptions import (
+    AuthenticationError,
+    AuthorizationError,
+    InvalidTokenError,
+    TokenExpiredError,
+)
 from app.infrastructure.database import engine
 
 
@@ -63,8 +70,51 @@ app.add_middleware(
 
 
 # ============================================================================
+# EXCEPTION HANDLERS — Auth / Token errors
+# ============================================================================
+
+@app.exception_handler(AuthenticationError)
+async def authentication_error_handler(request: Request, exc: AuthenticationError):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.message},
+    )
+
+
+@app.exception_handler(TokenExpiredError)
+async def token_expired_error_handler(request: Request, exc: TokenExpiredError):
+    return JSONResponse(
+        status_code=401,
+        content={"detail": exc.message},
+    )
+
+
+@app.exception_handler(InvalidTokenError)
+async def invalid_token_error_handler(request: Request, exc: InvalidTokenError):
+    return JSONResponse(
+        status_code=401,
+        content={"detail": exc.message},
+    )
+
+
+@app.exception_handler(AuthorizationError)
+async def authorization_error_handler(request: Request, exc: AuthorizationError):
+    return JSONResponse(
+        status_code=403,
+        content={"detail": exc.message},
+    )
+
+
+# ============================================================================
 # REGISTRAR ROUTERS
 # ============================================================================
+
+# Incluir endpoints de autenticación
+app.include_router(
+    auth.router,
+    prefix="/api/v1",
+    tags=["Autenticación"],
+)
 
 # Incluir endpoints de predicción
 app.include_router(
@@ -84,6 +134,20 @@ app.include_router(
     users.router,
     prefix="/api/v1",
     tags=["Usuarios"]
+)
+
+# Incluir endpoints de universidades y jerarquía académica
+app.include_router(
+    universities.router,
+    prefix="/api/v1",
+    tags=["Universidades"]
+)
+
+# Incluir endpoints de campus y jerarquía campus → programa → curso
+app.include_router(
+    campuses.router,
+    prefix="/api/v1",
+    tags=["Campus"]
 )
 
 

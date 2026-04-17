@@ -55,6 +55,17 @@ _DB_STUB = _stub_heavy_deps()
 # Import app after stubs are in place
 from app.main import app  # noqa: E402
 from app.infrastructure.database import get_session  # noqa: E402
+from app.api.v1.dependencies.auth import (  # noqa: E402
+    CurrentUser,
+    get_current_user,
+    require_self_or_roles,
+)
+from app.domain.enums import RoleEnum  # noqa: E402
+
+import uuid as _uuid  # noqa: E402
+
+# A fixed ADMIN user used to bypass auth in legacy (non-auth) tests.
+_ADMIN_USER = CurrentUser(id=_uuid.UUID("00000000-0000-0000-0000-000000000001"), role=RoleEnum.ADMIN)
 
 
 # ---------------------------------------------------------------------------
@@ -69,15 +80,26 @@ def anyio_backend():
 @pytest.fixture
 async def client():
     """
-    AsyncClient with mocked DB session injected via dependency_overrides.
+    AsyncClient with mocked DB session and auth bypassed (ADMIN user).
     Shared by test_users.py and test_users_properties.py.
+
+    Auth-specific tests in tests/integration/ use their own fixtures and
+    do NOT inherit this override.
     """
     mock_session = AsyncMock()
 
     async def _override_get_session():
         yield mock_session
 
+    async def _override_get_current_user():
+        return _ADMIN_USER
+
+    async def _override_require_self_or_roles():
+        return _ADMIN_USER
+
     app.dependency_overrides[get_session] = _override_get_session
+    app.dependency_overrides[get_current_user] = _override_get_current_user
+    app.dependency_overrides[require_self_or_roles] = _override_require_self_or_roles
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as c:

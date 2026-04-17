@@ -17,8 +17,9 @@ class UserCreate(BaseModel):
     role: RoleEnum
     microsoft_oid: str | None = None
     google_oid: str | None = None
-    password_hash: str | None = None
+    password: str | None = None
     ml_consent: bool = False
+    institutional_email: str | None = None
 
 
 class UserUpdate(BaseModel):
@@ -28,11 +29,13 @@ class UserUpdate(BaseModel):
     google_oid: str | None = None
     password_hash: str | None = None
     ml_consent: bool | None = None
+    institutional_email: str | None = None
 
 
 class UserRead(BaseModel):
     id: UUID
     email: str
+    institutional_email: str | None = None
     full_name: str
     role: RoleEnum
     status: UserStatusEnum

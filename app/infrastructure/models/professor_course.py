@@ -10,7 +10,7 @@ from sqlmodel import Field, SQLModel
 
 class ProfessorCourse(SQLModel, table=True):
     __tablename__ = "professor_courses"
-    __table_args__ = (UniqueConstraint("professor_id", "course_id"),)
+    __table_args__ = (UniqueConstraint("course_id"),)
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     professor_id: uuid.UUID = Field(foreign_key="users.id", nullable=False)

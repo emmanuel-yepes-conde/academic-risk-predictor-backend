@@ -24,6 +24,7 @@ alembic>=1.13.0
 
 # Seguridad
 bcrypt>=4.1.0
+PyJWT>=2.8.0
 
 # CORS y Middleware
 python-multipart==0.0.6

@@ -31,6 +31,7 @@ def _course_create(**kwargs) -> CourseCreate:
         name="Integration Course",
         credits=3,
         academic_period="2024-1",
+        program_id=uuid.uuid4(),
     )
     defaults.update(kwargs)
     return CourseCreate(**defaults)

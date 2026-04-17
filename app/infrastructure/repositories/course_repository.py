@@ -1,5 +1,5 @@
 """
-Course repository implementation (Req 6.2, 7.1, 7.2, 7.3).
+Course repository implementation (Req 6.2, 7.1, 7.2, 7.3, 3.4, 3.5).
 listar_estudiantes_inscritos applies RB-04 filter by professor's courses.
 """
 
@@ -15,6 +15,7 @@ from app.domain.interfaces.course_repository import ICourseRepository
 from app.infrastructure.models.course import Course
 from app.infrastructure.models.enrollment import Enrollment
 from app.infrastructure.models.professor_course import ProfessorCourse
+from app.infrastructure.models.program import Program
 from app.infrastructure.models.user import User
 from app.infrastructure.repositories.audit_log_repository import AuditLogRepository
 
@@ -60,6 +61,48 @@ class CourseRepository(ICourseRepository):
             select(User)
             .join(Enrollment, Enrollment.student_id == User.id)
             .where(Enrollment.course_id == course_id)
+        )
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def listar_por_programa(self, program_id: UUID) -> list[Course]:
+        """Return all courses belonging to the given program (Req 3.4)."""
+        stmt = select(Course).where(Course.program_id == program_id)
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def listar_por_universidad_y_programa(
+        self, university_id: UUID, program_id: UUID
+    ) -> list[Course]:
+        """
+        Return courses for a program that belongs to the given university (Req 3.5).
+        Validates the university→program hierarchy by joining through Program.
+        """
+        stmt = (
+            select(Course)
+            .join(Program, Program.id == Course.program_id)
+            .where(
+                Program.id == program_id,
+                Program.university_id == university_id,
+            )
+        )
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def listar_por_campus_y_programa(
+        self, campus_id: UUID, program_id: UUID
+    ) -> list[Course]:
+        """
+        Return courses for a program that belongs to the given campus (Req 4.2).
+        Validates the campus→program hierarchy by joining through Program.
+        """
+        stmt = (
+            select(Course)
+            .join(Program, Program.id == Course.program_id)
+            .where(
+                Program.id == program_id,
+                Program.campus_id == campus_id,
+            )
         )
         result = await self._session.execute(stmt)
         return list(result.scalars().all())

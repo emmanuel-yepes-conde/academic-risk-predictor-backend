@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from app.domain.enums import RoleEnum, UserStatusEnum
@@ -16,6 +16,9 @@ class IUserRepository(ABC):
 
     @abstractmethod
     async def create(self, user: UserCreate) -> User: ...
+
+    @abstractmethod
+    async def create_from_dict(self, data: dict[str, Any]) -> User: ...
 
     @abstractmethod
     async def get_by_id(self, id: UUID) -> User | None: ...

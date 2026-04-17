@@ -20,6 +20,9 @@ from app.infrastructure.models.enrollment import Enrollment  # noqa: F401
 from app.infrastructure.models.professor_course import ProfessorCourse  # noqa: F401
 from app.infrastructure.models.audit_log import AuditLog  # noqa: F401
 from app.infrastructure.models.consent import Consent  # noqa: F401
+from app.infrastructure.models.program import Program  # noqa: F401
+from app.infrastructure.models.student_profile import StudentProfile  # noqa: F401
+from app.infrastructure.models.university import University  # noqa: F401
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

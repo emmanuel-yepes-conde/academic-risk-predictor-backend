@@ -8,6 +8,7 @@ from uuid import UUID
 from fastapi import HTTPException
 
 from app.application.schemas.user import PaginatedResponse, UserCreate, UserRead, UserUpdate
+from app.core.security import hash_password
 from app.domain.enums import RoleEnum, UserStatusEnum
 from app.domain.interfaces.user_repository import IUserRepository
 
@@ -52,13 +53,19 @@ class UserService:
     async def create_user(self, data: UserCreate) -> UserRead:
         """
         Crea un nuevo usuario.
+        Hashea la contraseña antes de persistir.
         Lanza HTTPException(409) si el email ya está registrado.
         """
         existing = await self._repo.get_by_email(data.email)
         if existing is not None:
             raise HTTPException(status_code=409, detail="El email ya está registrado")
 
-        user = await self._repo.create(data)
+        # Build dict for the repository, hashing the plain password
+        user_data = data.model_dump(exclude={"password"})
+        if data.password:
+            user_data["password_hash"] = hash_password(data.password)
+
+        user = await self._repo.create_from_dict(user_data)
         return UserRead.model_validate(user)
 
     async def get_user(self, id: UUID) -> UserRead:
