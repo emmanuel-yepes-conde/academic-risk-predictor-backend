@@ -4,10 +4,18 @@ Controladores que manejan las peticiones HTTP
 Solo orquestación, sin lógica de negocio
 """
 
+from uuid import UUID
+
 from fastapi import APIRouter, HTTPException, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.schemas.student import StudentInput, PredictionOutput, ChatInput, ChatOutput
 from app.services.ml_service import AcademicRiskService, risk_service
-from typing import Dict
+from app.application.services.consent_service import ConsentService
+from app.application.services.ml_service import MLApplicationService
+from app.infrastructure.database import get_session
+from app.infrastructure.repositories.consent_repository import ConsentRepository
+from typing import Dict, Optional
 import numpy as np
 
 router = APIRouter()
@@ -19,10 +27,22 @@ def get_ml_service() -> AcademicRiskService:
     return risk_service
 
 
+def get_ml_application_service(
+    session: AsyncSession = Depends(get_session),
+    ml_service: AcademicRiskService = Depends(get_ml_service),
+) -> MLApplicationService:
+    """Construye MLApplicationService con ConsentService inyectado."""
+    consent_repo = ConsentRepository(session)
+    consent_service = ConsentService(consent_repo)
+    return MLApplicationService(ml_service, consent_service)
+
+
 @router.post("/predict", response_model=PredictionOutput)
 async def predecir_riesgo(
     estudiante: StudentInput,
-    service: AcademicRiskService = Depends(get_ml_service)
+    student_id: Optional[UUID] = None,
+    service: AcademicRiskService = Depends(get_ml_service),
+    ml_app_service: MLApplicationService = Depends(get_ml_application_service),
 ):
     """
     Endpoint principal para predecir el riesgo de reprobación de un estudiante.
@@ -60,8 +80,11 @@ async def predecir_riesgo(
             estudiante.uso_tutorias
         ]
         
-        # 2. Realizar predicción usando el servicio
-        result = service.predict(feature_vector)
+        # 2. Verificar consentimiento ML si se proporciona student_id (Req 8.2, 8.3)
+        if student_id is not None:
+            result = await ml_app_service.predict_with_consent_check(student_id, feature_vector)
+        else:
+            result = service.predict(feature_vector)
         probabilidad_riesgo = result["probability"]
         nivel_riesgo = result["risk_level"]
         features_scaled = np.array(result["scaled_features"])

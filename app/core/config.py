@@ -4,9 +4,10 @@ Centraliza todas las configuraciones y variables de entorno
 """
 
 import os
-from typing import List, Union, Annotated
+import uuid
+from typing import List, Union, Annotated, Optional
 from pydantic_settings import BaseSettings
-from pydantic import Field, BeforeValidator
+from pydantic import Field, BeforeValidator, model_validator
 
 
 def parse_cors_origins(v):
@@ -70,7 +71,47 @@ class Settings(BaseSettings):
     # Configuración de umbrales de riesgo
     UMBRAL_RIESGO_ALTO: float = Field(default=0.7, ge=0, le=1)
     UMBRAL_RIESGO_MEDIO: float = Field(default=0.4, ge=0, le=1)
-    
+
+    # Configuración de base de datos
+    DB_USER: str = Field(default="mpra_user", description="Usuario de la base de datos")
+    DB_PASSWORD: str = Field(default="mpra_secret", description="Contraseña de la base de datos")
+    DB_HOST: str = Field(default="localhost", description="Host de la base de datos")
+    DB_PORT: int = Field(default=5432, description="Puerto de la base de datos")
+    DB_NAME: str = Field(default="mpra_db", description="Nombre de la base de datos")
+    DATABASE_URL: Optional[str] = Field(default=None, description="URL de conexión a la base de datos")
+
+    # Universidad por defecto para migración de datos existentes
+    DEFAULT_UNIVERSITY_ID: uuid.UUID | None = Field(
+        default=None,
+        description="UUID de la universidad por defecto para migración de datos existentes"
+    )
+
+    # Configuración JWT
+    JWT_SECRET_KEY: str = Field(..., description="Clave secreta para firmar tokens JWT")
+    JWT_ALGORITHM: str = Field(default="HS256", description="Algoritmo de firma JWT")
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=30, description="Tiempo de expiración del access token en minutos")
+    REFRESH_TOKEN_EXPIRE_DAYS: int = Field(default=7, description="Tiempo de expiración del refresh token en días")
+
+    # Pool de conexiones
+    DB_POOL_MIN: int = Field(default=5, description="Tamaño mínimo del pool de conexiones")
+    DB_POOL_MAX: int = Field(default=20, description="Tamaño máximo del pool de conexiones")
+    DB_ECHO: bool = Field(default=False, description="Habilitar logging SQL de SQLAlchemy")
+
+    @model_validator(mode='before')
+    @classmethod
+    def build_database_url(cls, values: dict) -> dict:
+        """Construye DATABASE_URL automáticamente si no está definida en el entorno."""
+        if not values.get("DATABASE_URL"):
+            user = values.get("DB_USER", "mpra_user")
+            password = values.get("DB_PASSWORD", "mpra_secret")
+            host = values.get("DB_HOST", "localhost")
+            port = values.get("DB_PORT", 5432)
+            name = values.get("DB_NAME", "mpra_db")
+            values["DATABASE_URL"] = (
+                f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{name}"
+            )
+        return values
+
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",
