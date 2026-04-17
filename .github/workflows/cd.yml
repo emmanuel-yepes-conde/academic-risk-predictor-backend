@@ -1,0 +1,104 @@
+name: CD
+
+on:
+  push:
+    branches: [main, develop]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Entorno de despliegue"
+        required: true
+        type: choice
+        options:
+          - dev
+          - prod
+
+env:
+  ENV_NAME: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/main' && 'prod' || 'dev') }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      # --- Tests previos solo para producción ---
+      - name: Setup Python 3.12 (solo prod)
+        if: env.ENV_NAME == 'prod'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependencias (solo prod)
+        if: env.ENV_NAME == 'prod'
+        run: pip install -r requirements.txt
+
+      - name: Iniciar PostgreSQL para tests (solo prod)
+        if: env.ENV_NAME == 'prod'
+        run: |
+          docker run -d \
+            --name postgres-test \
+            -e POSTGRES_USER=mpra_test \
+            -e POSTGRES_PASSWORD=mpra_test_pass \
+            -e POSTGRES_DB=mpra_test_db \
+            -p 5432:5432 \
+            --health-cmd="pg_isready -U mpra_test" \
+            --health-interval=10s \
+            --health-timeout=5s \
+            --health-retries=5 \
+            postgres:16
+
+          until pg_isready -h localhost -p 5432 -U mpra_test; do
+            echo "Esperando a PostgreSQL..."
+            sleep 2
+          done
+
+      - name: Ejecutar migraciones y tests (solo prod)
+        if: env.ENV_NAME == 'prod'
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: mpra_test
+          DB_PASSWORD: mpra_test_pass
+          DB_NAME: mpra_test_db
+          JWT_SECRET_KEY: test-jwt-secret-key-for-ci
+          DATABASE_URL: postgresql+asyncpg://mpra_test:mpra_test_pass@localhost:5432/mpra_test_db
+        run: |
+          alembic upgrade head
+          python3 -m pytest tests/ -v --cov=app
+
+      # --- Despliegue ---
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Ejecutar despliegue
+        run: |
+          bash infra/deploy.sh \
+            -e ${{ env.ENV_NAME }} \
+            -r ${{ secrets.AZURE_REGION }} \
+            -p "${{ env.ENV_NAME == 'prod' && secrets.DB_PASSWORD_PROD || secrets.DB_PASSWORD_DEV }}" \
+            -j "${{ env.ENV_NAME == 'prod' && secrets.JWT_SECRET_PROD || secrets.JWT_SECRET_DEV }}"
+
+      # --- Health check post-despliegue ---
+      - name: Verificar health check
+        run: |
+          FQDN=$(az containerapp show \
+            --name "ca-mpra-${{ env.ENV_NAME }}" \
+            --resource-group "rg-mpra-${{ env.ENV_NAME }}" \
+            --query 'properties.configuration.ingress.fqdn' -o tsv)
+
+          for i in $(seq 1 10); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://${FQDN}/health" || true)
+            if [ "$STATUS" = "200" ]; then
+              echo "✅ Health check exitoso (intento $i)"
+              exit 0
+            fi
+            echo "⏳ Intento $i/10 — HTTP $STATUS, esperando 15s..."
+            sleep 15
+          done
+          echo "❌ Health check falló después de 10 intentos"
+          exit 1
