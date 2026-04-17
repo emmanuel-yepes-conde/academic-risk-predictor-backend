@@ -4,6 +4,8 @@ Verifica la construcción automática de DATABASE_URL y el uso directo cuando es
 Requisitos: 2.1, 2.4
 """
 
+import os
+
 import pytest
 from app.core.config import Settings
 
@@ -23,6 +25,11 @@ def make_settings(**kwargs) -> Settings:
 
 class TestDatabaseURLConstruction:
     """Propiedad 1 (unitaria): DATABASE_URL se construye a partir de campos individuales."""
+
+    @pytest.fixture(autouse=True)
+    def _clear_database_url_env(self, monkeypatch):
+        """Elimina DATABASE_URL del entorno para que no interfiera con la construcción dinámica."""
+        monkeypatch.delenv("DATABASE_URL", raising=False)
 
     def test_url_format(self):
         """La URL construida tiene el prefijo postgresql+asyncpg://."""
