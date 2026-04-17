@@ -384,6 +384,8 @@ task test
 
 ## Despliegue
 
+### Plataformas PaaS
+
 Soportado en Railway, Render y Heroku. Ver `Procfile`, `railway.json`, `render.yaml`.
 
 ```bash
@@ -392,3 +394,18 @@ web: uvicorn app.main:app --host 0.0.0.0 --port $PORT
 ```
 
 Asegúrate de configurar las variables de entorno en el panel del servicio, especialmente `DATABASE_URL`.
+
+### Despliegue en Azure con CI/CD (GitHub Actions)
+
+El proyecto cuenta con pipelines de **Integración Continua (CI)** y **Despliegue Continuo (CD)** automatizados mediante GitHub Actions. Se utilizan dos workflows separados:
+
+| Workflow | Archivo | Propósito |
+|----------|---------|-----------|
+| **CI** | `.github/workflows/ci.yml` | Ejecuta tests, cobertura de código y validación de la plantilla Bicep en cada Pull Request contra `main` o `develop` |
+| **CD** | `.github/workflows/cd.yml` | Despliega automáticamente a Azure Container Apps al fusionar código a `develop` (entorno dev) o `main` (entorno prod) |
+
+**Estrategia de ramas:**
+- Merge a `develop` → despliegue automático a **dev**
+- Merge a `main` → despliegue automático a **prod** (con ejecución de tests previos)
+
+> 📖 Para documentación detallada sobre CI/CD, configuración de GitHub Secrets, creación del Service Principal de Azure y ejecución manual de workflows, consulta [`infra/README.md`](infra/README.md).
