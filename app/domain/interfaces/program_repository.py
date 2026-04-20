@@ -9,15 +9,13 @@ if TYPE_CHECKING:
 
 
 class IProgramRepository(ABC):
-    """Interface for program query operations needed by CampusService (Req 4.1, 5.1)."""
-
-    @abstractmethod
-    async def list_by_campus(
-        self, campus_id: UUID, skip: int, limit: int
-    ) -> list[Program]: ...
-
-    @abstractmethod
-    async def count_by_campus(self, campus_id: UUID) -> int: ...
+    """Interface for program query operations (Req 6.1)."""
 
     @abstractmethod
     async def get_by_id(self, program_id: UUID) -> Program | None: ...
+
+    @abstractmethod
+    async def list_all(self, skip: int, limit: int) -> list[Program]: ...
+
+    @abstractmethod
+    async def count_all(self) -> int: ...

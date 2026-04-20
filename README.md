@@ -20,6 +20,8 @@ Sistema de predicción de riesgo académico basado en Machine Learning para la d
 
 El **MPRA** utiliza un modelo de **Regresión Logística** (scikit-learn) para transformar variables académicas en una probabilidad de riesgo (0–1), permitiendo intervenciones pedagógicas tempranas.
 
+El modelo de datos sigue una relación simplificada **Programa → Curso**, donde cada programa académico contiene sus cursos directamente, sin jerarquías intermedias de universidad o campus.
+
 **Stack:**
 - Python 3.12 + FastAPI (async) + uvicorn
 - PostgreSQL 16 (persistencia relacional)
@@ -73,17 +75,25 @@ academic-risk-predictor-backend/
 │   ├── main.py                          # Entry point FastAPI
 │   ├── api/v1/endpoints/
 │   │   ├── health.py                    # GET /health
+│   │   ├── auth.py                      # POST /api/v1/login, /register, /refresh
 │   │   ├── prediction.py                # POST /api/v1/predict, /chat
-│   │   └── users.py                     # CRUD /api/v1/users
+│   │   ├── users.py                     # CRUD /api/v1/users
+│   │   ├── programs.py                  # GET /api/v1/programs/{id}/courses
+│   │   └── courses.py                   # Asignación profesor-curso, estudiantes
 │   ├── application/
 │   │   ├── schemas/                     # DTOs Pydantic
 │   │   │   ├── user.py
 │   │   │   ├── consent.py
 │   │   │   ├── course.py
+│   │   │   ├── program.py
+│   │   │   ├── professor_course.py
 │   │   │   └── audit_log.py
 │   │   └── services/                    # Lógica de negocio
 │   │       ├── user_service.py
+│   │       ├── auth_service.py
 │   │       ├── consent_service.py
+│   │       ├── professor_course_service.py
+│   │       ├── token_service.py
 │   │       └── ml_service.py
 │   ├── core/
 │   │   ├── config.py                    # Settings (pydantic-settings)
@@ -100,7 +110,11 @@ academic-risk-predictor-backend/
 ├── alembic/                             # Migraciones de base de datos
 │   └── versions/
 │       ├── 0001_initial_schema.py
-│       └── 0002_add_user_status.py
+│       ├── 0002_add_user_status.py
+│       ├── 0003_add_programs_and_student_profiles.py
+│       ├── 0004_add_university_and_multi_university_support.py
+│       ├── 0005_add_campus_hierarchy.py
+│       └── 0006_simplify_program_course_model.py
 ├── datasets/                            # Dataset de entrenamiento (.csv)
 ├── ml_models/                           # Artefactos ML (.joblib, generados)
 ├── tests/
@@ -183,13 +197,18 @@ alembic revision --autogenerate -m "descripcion_del_cambio"
 alembic history
 ```
 
+### Modelo de Datos
+
+El sistema utiliza un modelo de datos simplificado con la relación directa **Programa → Curso**. Cada programa académico contiene cursos, y los perfiles de estudiantes se vinculan opcionalmente a un programa.
+
 ### Diagrama ER
 
 ```mermaid
 erDiagram
     users {
         uuid id PK
-        string email
+        string email UK
+        string institutional_email UK
         string full_name
         string role
         string status
@@ -199,17 +218,42 @@ erDiagram
         datetime created_at
         datetime updated_at
     }
+    programs {
+        uuid id PK
+        string institution
+        string degree_type
+        string program_code UK
+        string program_name
+        string academic_group
+        string location
+        int snies_code UK
+        datetime created_at
+    }
+    courses {
+        uuid id PK
+        string code UK
+        string name
+        int credits
+        string academic_period
+        uuid program_id FK
+        datetime created_at
+    }
+    student_profiles {
+        uuid id PK
+        uuid user_id FK
+        uuid program_id FK "nullable"
+        string student_institutional_id UK
+        string document_type
+        string document_number
+        datetime created_at
+        datetime updated_at
+    }
     consents {
         uuid id PK
         uuid student_id FK
         bool accepted
         string terms_version
         datetime accepted_at
-    }
-    courses {
-        uuid id PK
-        string name
-        string code
     }
     enrollments {
         uuid id PK
@@ -229,6 +273,9 @@ erDiagram
         jsonb payload
         datetime created_at
     }
+    programs ||--o{ courses : "tiene"
+    programs ||--o{ student_profiles : "pertenece a"
+    users ||--o{ student_profiles : "tiene"
     users ||--o{ consents : "tiene"
     users ||--o{ enrollments : "inscrito en"
     users ||--o{ professor_courses : "dicta"
@@ -361,6 +408,61 @@ Respuesta paginada:
   "limit": 20
 }
 ```
+
+---
+
+### Programas
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/api/v1/programs/{program_id}/courses` | Listar cursos de un programa (404 si no existe) |
+
+#### `GET /api/v1/programs/{program_id}/courses`
+
+Retorna los cursos pertenecientes al programa indicado. Retorna 404 con `"Programa no encontrado"` si el programa no existe.
+
+Respuesta `200`:
+```json
+[
+  {
+    "id": "uuid",
+    "code": "MAT101",
+    "name": "Cálculo I",
+    "credits": 4,
+    "academic_period": "2025-1",
+    "program_id": "uuid",
+    "created_at": "2025-01-01T00:00:00Z"
+  }
+]
+```
+
+---
+
+### Cursos y Asignación Profesor-Curso
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| POST | `/api/v1/courses/{course_id}/professor` | Asignar o reemplazar profesor de un curso |
+| GET | `/api/v1/courses/{course_id}/professor` | Obtener profesor asignado a un curso |
+| GET | `/api/v1/professors/{professor_id}/courses` | Listar cursos asignados a un profesor |
+| GET | `/api/v1/courses/{course_id}/students` | Listar estudiantes inscritos en un curso (RB-04) |
+
+#### `POST /api/v1/courses/{course_id}/professor`
+
+Asigna un profesor al curso indicado. Si el curso ya tiene un profesor asignado, lo reemplaza. El usuario debe tener rol `PROFESSOR`.
+
+Request body:
+```json
+{
+  "professor_id": "uuid"
+}
+```
+
+#### `GET /api/v1/courses/{course_id}/students`
+
+Retorna los estudiantes inscritos en el curso indicado. El profesor solicitante debe estar asignado al curso (RB-04). Retorna 403 si el profesor no está asignado.
+
+Query param: `professor_id` (obligatorio) — ID del profesor que solicita el acceso.
 
 ---
 

@@ -10,8 +10,6 @@ from app.infrastructure.models.audit_log import AuditLog
 from app.infrastructure.models.consent import Consent
 from app.infrastructure.models.program import Program
 from app.infrastructure.models.student_profile import StudentProfile
-from app.infrastructure.models.university import University
-from app.infrastructure.models.campus import Campus
 
 __all__ = [
     "User",
@@ -22,6 +20,4 @@ __all__ = [
     "Consent",
     "Program",
     "StudentProfile",
-    "University",
-    "Campus",
 ]

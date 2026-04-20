@@ -8,13 +8,10 @@ from pydantic import BaseModel
 
 class ProgramRead(BaseModel):
     id: UUID
-    university_id: UUID
-    campus_id: UUID
     institution: str
     degree_type: str
     program_code: str
     program_name: str
-    pensum: str
     academic_group: str
     location: str
     snies_code: int

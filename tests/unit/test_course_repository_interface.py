@@ -1,11 +1,9 @@
 """
 Unit tests for ICourseRepository interface.
-Validates: Requirements 4.2 — listar_por_campus_y_programa abstract method.
+Validates: Requirements 6.3 — simplified interface without hierarchy methods.
 """
 
 from __future__ import annotations
-
-import uuid
 
 import pytest
 
@@ -13,7 +11,7 @@ from app.domain.interfaces.course_repository import ICourseRepository
 
 
 class TestICourseRepositoryInterface:
-    """Verify ICourseRepository ABC defines listar_por_campus_y_programa."""
+    """Verify ICourseRepository ABC defines the correct simplified methods."""
 
     def test_cannot_instantiate_abstract_class(self):
         """ICourseRepository is abstract and cannot be instantiated directly."""
@@ -39,17 +37,11 @@ class TestICourseRepositoryInterface:
             async def listar_por_programa(self, program_id):
                 ...
 
-            async def listar_por_universidad_y_programa(self, university_id, program_id):
-                ...
-
-            async def listar_por_campus_y_programa(self, campus_id, program_id):
-                ...
-
         repo = ConcreteCourseRepo()
         assert isinstance(repo, ICourseRepository)
 
-    def test_missing_listar_por_campus_y_programa_raises_type_error(self):
-        """Omitting 'listar_por_campus_y_programa' prevents instantiation (Req 4.2)."""
+    def test_missing_listar_por_programa_raises_type_error(self):
+        """Omitting 'listar_por_programa' prevents instantiation (Req 6.3)."""
 
         class IncompleteCourseRepo(ICourseRepository):
             async def crear(self, asignatura):
@@ -64,19 +56,26 @@ class TestICourseRepositoryInterface:
             async def listar_estudiantes_inscritos(self, course_id):
                 ...
 
-            async def listar_por_programa(self, program_id):
-                ...
-
-            async def listar_por_universidad_y_programa(self, university_id, program_id):
-                ...
-
         with pytest.raises(TypeError):
             IncompleteCourseRepo()
 
-    def test_listar_por_campus_y_programa_is_abstract_method(self):
-        """The method listar_por_campus_y_programa must be defined as abstract."""
+    def test_no_hierarchy_methods_in_interface(self):
+        """The interface must NOT have hierarchy methods (Req 6.3)."""
         abstract_methods = ICourseRepository.__abstractmethods__
-        assert "listar_por_campus_y_programa" in abstract_methods
+        assert "listar_por_universidad_y_programa" not in abstract_methods
+        assert "listar_por_campus_y_programa" not in abstract_methods
+
+    def test_required_abstract_methods(self):
+        """The interface must define exactly the 5 required methods."""
+        abstract_methods = ICourseRepository.__abstractmethods__
+        expected = {
+            "crear",
+            "obtener_por_id",
+            "listar_por_docente",
+            "listar_estudiantes_inscritos",
+            "listar_por_programa",
+        }
+        assert abstract_methods == expected
 
     def test_interface_is_exported_from_init(self):
         """ICourseRepository should be importable from the interfaces package."""

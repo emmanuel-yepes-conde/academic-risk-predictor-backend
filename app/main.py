@@ -8,7 +8,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.core.config import settings
-from app.api.v1.endpoints import campuses, prediction, health, users, universities, auth
+from app.api.v1.endpoints import prediction, health, users, auth, programs, courses
 from app.domain.exceptions import (
     AuthenticationError,
     AuthorizationError,
@@ -136,18 +136,18 @@ app.include_router(
     tags=["Usuarios"]
 )
 
-# Incluir endpoints de universidades y jerarquía académica
+# Incluir endpoints de programas académicos
 app.include_router(
-    universities.router,
+    programs.router,
     prefix="/api/v1",
-    tags=["Universidades"]
+    tags=["Programas"]
 )
 
-# Incluir endpoints de campus y jerarquía campus → programa → curso
+# Incluir endpoints de cursos y asignación profesor-curso
 app.include_router(
-    campuses.router,
+    courses.router,
     prefix="/api/v1",
-    tags=["Campus"]
+    tags=["Cursos"]
 )
 
 
