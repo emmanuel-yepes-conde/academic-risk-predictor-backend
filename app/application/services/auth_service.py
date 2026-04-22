@@ -59,8 +59,8 @@ class AuthService:
         if user.status != UserStatusEnum.ACTIVE:
             raise AuthenticationError("Cuenta desactivada", 403)
 
-        access_token = self._token_service.create_access_token(user.id, user.role)
-        refresh_token = self._token_service.create_refresh_token(user.id, user.role)
+        access_token = self._token_service.create_access_token(user.id, user.role, user.full_name)
+        refresh_token = self._token_service.create_refresh_token(user.id, user.role, user.full_name)
 
         return TokenResponse(
             access_token=access_token,
@@ -91,11 +91,12 @@ class AuthService:
         if payload.type != "refresh":
             raise InvalidTokenError("Token inválido")
 
-        user_id = UUID(payload.sub)
-        role = payload.role
+        user_id   = UUID(payload.sub)
+        role      = payload.role
+        full_name = payload.full_name
 
-        access_token = self._token_service.create_access_token(user_id, role)
-        new_refresh_token = self._token_service.create_refresh_token(user_id, role)
+        access_token      = self._token_service.create_access_token(user_id, role, full_name)
+        new_refresh_token = self._token_service.create_refresh_token(user_id, role, full_name)
 
         return TokenResponse(
             access_token=access_token,

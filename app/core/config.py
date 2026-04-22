@@ -97,6 +97,14 @@ class Settings(BaseSettings):
     DB_POOL_MAX: int = Field(default=20, description="Tamaño máximo del pool de conexiones")
     DB_ECHO: bool = Field(default=False, description="Habilitar logging SQL de SQLAlchemy")
 
+    # Configuración SMTP para envío de correos
+    SMTP_SERVER: str = Field(default="smtp.gmail.com", description="Servidor SMTP")
+    SMTP_PORT: int = Field(default=587, description="Puerto SMTP")
+    SMTP_USERNAME: str = Field(default="", description="Usuario SMTP")
+    SMTP_PASSWORD: str = Field(default="", description="Contraseña SMTP")
+    FROM_EMAIL: str = Field(default="", description="Dirección de correo remitente")
+    FROM_NAME: str = Field(default="Academic Risk Notifications", description="Nombre del remitente")
+
     @model_validator(mode='before')
     @classmethod
     def build_database_url(cls, values: dict) -> dict:

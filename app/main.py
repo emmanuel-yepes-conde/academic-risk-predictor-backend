@@ -8,7 +8,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.core.config import settings
-from app.api.v1.endpoints import campuses, prediction, health, users, universities, auth
+from app.api.v1.endpoints import campuses, prediction, health, users, universities, auth, notifications
 from app.domain.exceptions import (
     AuthenticationError,
     AuthorizationError,
@@ -148,6 +148,13 @@ app.include_router(
     campuses.router,
     prefix="/api/v1",
     tags=["Campus"]
+)
+
+# Incluir endpoints de notificaciones por correo electrónico
+app.include_router(
+    notifications.router,
+    prefix="/api/v1",
+    tags=["Notificaciones"]
 )
 
 

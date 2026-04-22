@@ -10,9 +10,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.application.schemas.course import CourseRead
+from app.application.schemas.course import CourseCreate, CourseRead
 from app.application.schemas.professor_course import ProfessorAssign, ProfessorCourseRead
-from app.application.schemas.program import ProgramRead
+from app.application.schemas.program import ProgramCreate, ProgramRead
 from app.application.schemas.university import UniversityCreate, UniversityRead, UniversityUpdate
 from app.application.schemas.user import PaginatedResponse, UserRead
 from app.application.services.professor_course_service import ProfessorCourseService
@@ -183,6 +183,94 @@ async def list_courses_by_program(
     repo = CourseRepository(session)
     courses = await repo.listar_por_programa(program_id)
     return [CourseRead.model_validate(c) for c in courses]
+
+
+@router.post(
+    "/programs",
+    response_model=ProgramRead,
+    status_code=201,
+    summary="Crear un nuevo programa académico",
+    description="Crea un programa académico. Requiere rol ADMIN.",
+    tags=["Programas"],
+)
+async def create_program(
+    body: ProgramCreate,
+    session: AsyncSession = Depends(get_session),
+) -> ProgramRead:
+    from app.infrastructure.models.program import Program as ProgramModel
+    from app.infrastructure.models.campus import Campus
+    from sqlalchemy import select
+
+    # Validate campus exists
+    campus_result = await session.execute(
+        select(Campus).where(Campus.id == body.campus_id)
+    )
+    campus = campus_result.scalar_one_or_none()
+    if campus is None:
+        raise HTTPException(status_code=404, detail="Campus no encontrado")
+
+    program = ProgramModel(
+        campus_id=body.campus_id,
+        university_id=campus.university_id,
+        institution=body.institution,
+        degree_type=body.degree_type,
+        program_code=body.program_code,
+        program_name=body.program_name,
+        pensum=body.pensum,
+        academic_group=body.academic_group,
+        location=body.location,
+        snies_code=body.snies_code,
+    )
+    session.add(program)
+    try:
+        await session.commit()
+        await session.refresh(program)
+    except Exception:
+        await session.rollback()
+        raise HTTPException(status_code=409, detail="Ya existe un programa con ese código SNIES o combinación campus/código")
+
+    return ProgramRead.model_validate(program)
+
+
+@router.post(
+    "/courses",
+    response_model=CourseRead,
+    status_code=201,
+    summary="Crear una nueva materia/curso",
+    description="Crea una materia. Requiere que exista el programa al que pertenece.",
+    tags=["Cursos"],
+)
+async def create_course(
+    body: CourseCreate,
+    session: AsyncSession = Depends(get_session),
+) -> CourseRead:
+    from app.infrastructure.models.course import Course as CourseModel
+    from app.infrastructure.models.program import Program as ProgramModel
+    from sqlalchemy import select
+
+    # Validate program exists
+    prog_result = await session.execute(
+        select(ProgramModel).where(ProgramModel.id == body.program_id)
+    )
+    if prog_result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=404, detail="Programa no encontrado")
+
+    course = CourseModel(
+        code=body.code,
+        name=body.name,
+        credits=body.credits,
+        academic_period=body.academic_period,
+        program_id=body.program_id,
+    )
+    session.add(course)
+    try:
+        await session.commit()
+        await session.refresh(course)
+    except Exception:
+        await session.rollback()
+        raise HTTPException(status_code=409, detail="Ya existe una materia con ese código")
+
+    return CourseRead.model_validate(course)
 
 
 @router.get(

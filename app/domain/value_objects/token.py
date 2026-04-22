@@ -23,3 +23,4 @@ class TokenPayload:
     type: str
     exp: datetime
     iat: datetime
+    full_name: str = ""
