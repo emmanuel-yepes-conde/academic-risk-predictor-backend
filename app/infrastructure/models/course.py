@@ -20,6 +20,9 @@ class Course(SQLModel, table=True):
     program_id: uuid.UUID = Field(
         foreign_key="programs.id", nullable=False, index=True
     )  # FK → programs.id
+    professor_id: uuid.UUID | None = Field(
+        default=None, foreign_key="users.id", nullable=True, index=True
+    )  # FK → users.id (profesor asignado, nullable)
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),

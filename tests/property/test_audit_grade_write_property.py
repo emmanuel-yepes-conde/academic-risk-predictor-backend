@@ -19,8 +19,8 @@ from hypothesis import strategies as st
 from app.application.schemas.audit_log import AuditLogCreate
 from app.application.services.professor_course_service import ProfessorCourseService
 from app.domain.enums import OperationEnum
+from app.infrastructure.models.course import Course
 from app.infrastructure.models.enrollment import Enrollment
-from app.infrastructure.models.professor_course import ProfessorCourse
 
 
 # ---------------------------------------------------------------------------
@@ -68,7 +68,6 @@ def _build_service_with_audit_capture(
         except Exception:
             params = {}
 
-        has_professor_id_param = any("professor_id" in k for k in params)
         has_student_id_param = any("student_id" in k for k in params)
 
         bound_course_id = None
@@ -96,21 +95,32 @@ def _build_service_with_audit_capture(
                 )
             return FakeScalarResult(None)
 
-        elif has_professor_id_param and bound_course_id is not None:
-            # ProfessorCourse lookup
-            if bound_course_id in assigned_course_ids:
-                return FakeScalarResult(
-                    ProfessorCourse(
-                        id=uuid4(),
-                        professor_id=professor_id,
-                        course_id=bound_course_id,
-                    )
-                )
-            return FakeScalarResult(None)
-
         return FakeScalarResult(None)
 
     session.execute = AsyncMock(side_effect=mock_execute)
+
+    # Mock course_repo.obtener_por_id to return Course with correct professor_id
+    async def mock_obtener_por_id(course_id):
+        if course_id in assigned_course_ids:
+            return Course(
+                id=course_id,
+                code=f"COURSE-{course_id}",
+                name=f"Course {course_id}",
+                credits=3,
+                academic_period="2026-1",
+                program_id=uuid4(),
+                professor_id=professor_id,
+            )
+        else:
+            return Course(
+                id=course_id,
+                code=f"COURSE-{course_id}",
+                name=f"Course {course_id}",
+                credits=3,
+                academic_period="2026-1",
+                program_id=uuid4(),
+                professor_id=None,
+            )
 
     # Build the service with injected mocks
     service = object.__new__(ProfessorCourseService)
@@ -118,6 +128,7 @@ def _build_service_with_audit_capture(
     service._audit = AsyncMock()
     service._audit.register = AsyncMock()
     service._course_repo = AsyncMock()
+    service._course_repo.obtener_por_id = AsyncMock(side_effect=mock_obtener_por_id)
 
     return service, service._audit.register
 

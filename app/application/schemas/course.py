@@ -20,6 +20,7 @@ class CourseRead(BaseModel):
     name: str
     credits: int
     academic_period: str
+    professor_id: UUID | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

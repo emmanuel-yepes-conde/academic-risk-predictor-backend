@@ -23,7 +23,6 @@ from sqlmodel import SQLModel
 from app.domain.enums import RoleEnum
 from app.infrastructure.models.course import Course
 from app.infrastructure.models.enrollment import Enrollment
-from app.infrastructure.models.professor_course import ProfessorCourse
 from app.infrastructure.models.program import Program
 from app.infrastructure.models.user import User
 from app.infrastructure.repositories.user_repository import UserRepository
@@ -40,7 +39,6 @@ _TABLES = [
     User.__table__,
     Course.__table__,
     Enrollment.__table__,
-    ProfessorCourse.__table__,
 ]
 
 
@@ -183,14 +181,8 @@ async def test_professor_only_sees_enrolled_students(
         session.flush()
 
         course = _make_course(program.id)
+        course.professor_id = professor.id
         session.add(course)
-
-        professor_course = ProfessorCourse(
-            id=uuid.uuid4(),
-            professor_id=professor.id,
-            course_id=course.id,
-        )
-        session.add(professor_course)
 
         # 3. Create n_students student users
         students = [_make_user(RoleEnum.STUDENT, i) for i in range(n_students)]

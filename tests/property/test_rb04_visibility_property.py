@@ -8,7 +8,7 @@ the RB-04 rule that governs professor → student data visibility.
 
 For any professor and any student, the professor SHALL be able to access the
 student's data if and only if the student is enrolled in at least one course
-assigned to that professor via the professor_courses table.  If no such
+assigned to that professor (via Course.professor_id).  If no such
 enrollment-course-assignment relationship exists, access SHALL be denied with
 HTTP 403.
 """

@@ -24,8 +24,8 @@ from app.core.config import settings
 from app.domain.enums import RoleEnum
 from app.domain.exceptions import InvalidTokenError, TokenExpiredError
 from app.infrastructure.database import get_session
+from app.infrastructure.models.course import Course
 from app.infrastructure.models.enrollment import Enrollment
-from app.infrastructure.models.professor_course import ProfessorCourse
 
 
 # ---------------------------------------------------------------------------
@@ -154,11 +154,11 @@ async def require_self_or_roles(
         stmt = (
             select(Enrollment.id)
             .join(
-                ProfessorCourse,
-                ProfessorCourse.course_id == Enrollment.course_id,
+                Course,
+                Course.id == Enrollment.course_id,
             )
             .where(
-                ProfessorCourse.professor_id == current_user.id,
+                Course.professor_id == current_user.id,
                 Enrollment.student_id == user_id,
             )
             .limit(1)

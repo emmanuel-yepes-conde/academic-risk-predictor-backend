@@ -27,7 +27,6 @@ from app.infrastructure.models.audit_log import AuditLog
 from app.infrastructure.models.consent import Consent
 from app.infrastructure.models.course import Course
 from app.infrastructure.models.enrollment import Enrollment
-from app.infrastructure.models.professor_course import ProfessorCourse
 from app.infrastructure.models.program import Program
 from app.infrastructure.models.user import User
 
@@ -41,7 +40,6 @@ ALL_TABLES = [
     User.__table__,
     Course.__table__,
     Enrollment.__table__,
-    ProfessorCourse.__table__,
     Consent.__table__,
     AuditLog.__table__,
 ]

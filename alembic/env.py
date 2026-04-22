@@ -17,7 +17,6 @@ from app.core.config import settings
 from app.infrastructure.models.user import User  # noqa: F401
 from app.infrastructure.models.course import Course  # noqa: F401
 from app.infrastructure.models.enrollment import Enrollment  # noqa: F401
-from app.infrastructure.models.professor_course import ProfessorCourse  # noqa: F401
 from app.infrastructure.models.audit_log import AuditLog  # noqa: F401
 from app.infrastructure.models.consent import Consent  # noqa: F401
 from app.infrastructure.models.program import Program  # noqa: F401

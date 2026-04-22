@@ -14,7 +14,6 @@ from app.domain.enums import OperationEnum
 from app.domain.interfaces.course_repository import ICourseRepository
 from app.infrastructure.models.course import Course
 from app.infrastructure.models.enrollment import Enrollment
-from app.infrastructure.models.professor_course import ProfessorCourse
 from app.infrastructure.models.user import User
 from app.infrastructure.repositories.audit_log_repository import AuditLogRepository
 
@@ -43,11 +42,7 @@ class CourseRepository(ICourseRepository):
 
     async def listar_por_docente(self, docente_id: UUID) -> list[Course]:
         """Return all courses assigned to the given professor."""
-        stmt = (
-            select(Course)
-            .join(ProfessorCourse, ProfessorCourse.course_id == Course.id)
-            .where(ProfessorCourse.professor_id == docente_id)
-        )
+        stmt = select(Course).where(Course.professor_id == docente_id)
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 

@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.schemas.course import CourseRead
-from app.application.schemas.professor_course import ProfessorAssign, ProfessorCourseRead
+from app.application.schemas.professor_course import ProfessorAssign, ProfessorAssignmentRead
 from app.application.schemas.user import UserRead
 from app.application.services.professor_course_service import ProfessorCourseService
 from app.infrastructure.database import get_session
@@ -34,7 +34,7 @@ def _get_professor_course_service(
 
 @router.post(
     "/courses/{course_id}/professor",
-    response_model=ProfessorCourseRead,
+    response_model=ProfessorAssignmentRead,
     status_code=200,
     summary="Asignar o reemplazar profesor de un curso",
     description=(
@@ -47,7 +47,7 @@ async def assign_professor_to_course(
     course_id: UUID,
     body: ProfessorAssign,
     service: ProfessorCourseService = Depends(_get_professor_course_service),
-) -> ProfessorCourseRead:
+) -> ProfessorAssignmentRead:
     return await service.assign_professor(course_id, body.professor_id)
 
 
