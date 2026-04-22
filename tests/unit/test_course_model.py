@@ -79,19 +79,25 @@ class TestCourseReadSchema:
 
     def test_course_read_professor_id_accepts_none(self):
         """CourseRead.professor_id must accept None."""
+        from app.domain.enums import CourseStatusEnum
+
         data = CourseRead(
             id=uuid.uuid4(),
             code="CS101",
             name="Intro to CS",
             credits=3,
             academic_period="2025-1",
+            program_id=uuid.uuid4(),
             professor_id=None,
+            status=CourseStatusEnum.ACTIVE,
             created_at=datetime.now(timezone.utc),
         )
         assert data.professor_id is None
 
     def test_course_read_professor_id_accepts_uuid(self):
         """CourseRead.professor_id must accept a UUID."""
+        from app.domain.enums import CourseStatusEnum
+
         prof_id = uuid.uuid4()
         data = CourseRead(
             id=uuid.uuid4(),
@@ -99,13 +105,17 @@ class TestCourseReadSchema:
             name="Intro to CS",
             credits=3,
             academic_period="2025-1",
+            program_id=uuid.uuid4(),
             professor_id=prof_id,
+            status=CourseStatusEnum.ACTIVE,
             created_at=datetime.now(timezone.utc),
         )
         assert data.professor_id == prof_id
 
     def test_course_read_serializes_professor_id(self):
         """CourseRead must include professor_id in serialized output."""
+        from app.domain.enums import CourseStatusEnum
+
         prof_id = uuid.uuid4()
         data = CourseRead(
             id=uuid.uuid4(),
@@ -113,7 +123,9 @@ class TestCourseReadSchema:
             name="Intro to CS",
             credits=3,
             academic_period="2025-1",
+            program_id=uuid.uuid4(),
             professor_id=prof_id,
+            status=CourseStatusEnum.ACTIVE,
             created_at=datetime.now(timezone.utc),
         )
         dumped = data.model_dump()

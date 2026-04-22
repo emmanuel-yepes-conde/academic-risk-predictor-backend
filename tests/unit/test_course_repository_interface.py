@@ -37,6 +37,24 @@ class TestICourseRepositoryInterface:
             async def listar_por_programa(self, program_id):
                 ...
 
+            async def create(self, data):
+                ...
+
+            async def update(self, course_id, data):
+                ...
+
+            async def get_by_code(self, code):
+                ...
+
+            async def list_all(self, skip, limit, status=None):
+                ...
+
+            async def count_all(self, status=None):
+                ...
+
+            async def update_status(self, course_id, status):
+                ...
+
         repo = ConcreteCourseRepo()
         assert isinstance(repo, ICourseRepository)
 
@@ -66,7 +84,7 @@ class TestICourseRepositoryInterface:
         assert "listar_por_campus_y_programa" not in abstract_methods
 
     def test_required_abstract_methods(self):
-        """The interface must define exactly the 5 required methods."""
+        """The interface must define exactly the 11 required methods (5 original + 6 CRUD)."""
         abstract_methods = ICourseRepository.__abstractmethods__
         expected = {
             "crear",
@@ -74,6 +92,12 @@ class TestICourseRepositoryInterface:
             "listar_por_docente",
             "listar_estudiantes_inscritos",
             "listar_por_programa",
+            "create",
+            "update",
+            "get_by_code",
+            "list_all",
+            "count_all",
+            "update_status",
         }
         assert abstract_methods == expected
 

@@ -5,7 +5,8 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 if TYPE_CHECKING:
-    from app.application.schemas.course import CourseCreate
+    from app.application.schemas.course import CourseCreate, CourseUpdate
+    from app.domain.enums import CourseStatusEnum
     from app.infrastructure.models.course import Course
     from app.infrastructure.models.user import User
 
@@ -27,3 +28,27 @@ class ICourseRepository(ABC):
 
     @abstractmethod
     async def listar_por_programa(self, program_id: UUID) -> list[Course]: ...
+
+    # --- Métodos CRUD nuevos ---
+
+    @abstractmethod
+    async def create(self, data: dict) -> Course: ...
+
+    @abstractmethod
+    async def update(self, course_id: UUID, data: CourseUpdate) -> Course | None: ...
+
+    @abstractmethod
+    async def get_by_code(self, code: str) -> Course | None: ...
+
+    @abstractmethod
+    async def list_all(
+        self, skip: int, limit: int, status: CourseStatusEnum | None = None
+    ) -> list[Course]: ...
+
+    @abstractmethod
+    async def count_all(self, status: CourseStatusEnum | None = None) -> int: ...
+
+    @abstractmethod
+    async def update_status(
+        self, course_id: UUID, status: CourseStatusEnum
+    ) -> Course | None: ...

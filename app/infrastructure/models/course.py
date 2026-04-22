@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 import sqlalchemy as sa
 from sqlmodel import Field, SQLModel
 
+from app.domain.enums import CourseStatusEnum
+
 
 class Course(SQLModel, table=True):
     __tablename__ = "courses"
@@ -23,6 +25,11 @@ class Course(SQLModel, table=True):
     professor_id: uuid.UUID | None = Field(
         default=None, foreign_key="users.id", nullable=True, index=True
     )  # FK → users.id (profesor asignado, nullable)
+    status: CourseStatusEnum = Field(
+        default=CourseStatusEnum.ACTIVE,
+        nullable=False,
+        sa_column_kwargs={"server_default": "ACTIVE"},
+    )
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
