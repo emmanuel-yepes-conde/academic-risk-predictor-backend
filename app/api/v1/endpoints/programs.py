@@ -1,6 +1,6 @@
 """
 ProgramRouter — endpoints para programas académicos y sus cursos.
-Requisitos: 4.2, 4.3, 4.4, 5.3, 5.4, 6.1–6.7, 7.1–7.8
+Requisitos: 4.1–4.3, 5.3, 5.4, 6.1–6.7, 7.1–7.8
 """
 
 from uuid import UUID
@@ -8,7 +8,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.dependencies.auth import CurrentUser, require_roles
+from app.api.v1.dependencies.auth import CurrentUser, get_current_user, require_roles
 from app.application.schemas.course import CourseRead
 from app.application.schemas.program import ProgramCreate, ProgramRead, ProgramUpdate
 from app.application.services.program_service import ProgramService
@@ -67,6 +67,28 @@ async def update_program(
     service: ProgramService = Depends(_get_service),
 ) -> ProgramRead:
     return await service.update_program(program_id, body)
+
+
+# ---------------------------------------------------------------------------
+# GET /programs/{program_id} — any authenticated user
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/programs/{program_id}",
+    response_model=ProgramRead,
+    status_code=200,
+    summary="Obtener un programa académico por ID",
+    description="Retorna los datos de un programa académico por su ID. "
+                "Accesible para cualquier usuario autenticado (STUDENT, PROFESSOR, ADMIN).",
+    tags=["Programas"],
+)
+async def get_program(
+    program_id: UUID,
+    current_user: CurrentUser = Depends(get_current_user),
+    service: ProgramService = Depends(_get_service),
+) -> ProgramRead:
+    return await service.get_program(program_id)
 
 
 # ---------------------------------------------------------------------------

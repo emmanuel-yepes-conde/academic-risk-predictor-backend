@@ -1,7 +1,7 @@
 """
 Unit tests for ProgramService.
 
-Tests cover specific examples and edge cases for create and update flows:
+Tests cover specific examples and edge cases for create, update, and get flows:
 - test_create_program_success — happy path with valid data
 - test_create_program_duplicate_program_code_returns_409
 - test_create_program_duplicate_snies_code_returns_409
@@ -10,8 +10,10 @@ Tests cover specific examples and edge cases for create and update flows:
 - test_update_program_duplicate_program_code_different_program_returns_409
 - test_update_program_duplicate_snies_code_different_program_returns_409
 - test_update_program_same_codes_no_conflict — self-update
+- test_get_program_success — happy path retrieval by ID
+- test_get_program_not_found_returns_404 — non-existent ID
 
-Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9
+Requirements: 4.1, 4.2, 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9
 """
 
 from __future__ import annotations
@@ -259,3 +261,48 @@ class TestUpdateProgramSameCodesNoConflict:
         assert isinstance(result, ProgramRead)
         assert result.program_name == "Psicología Actualizada"
         repo.update.assert_awaited_once()
+
+
+# ===================================================================
+# Get: happy path (Requirement 4.1)
+# ===================================================================
+
+
+class TestGetProgramSuccess:
+    @pytest.mark.anyio
+    async def test_get_program_success(self):
+        """Existing program_id must return ProgramRead."""
+        repo = _make_repo()
+        program = _make_program()
+        repo.get_by_id.return_value = program
+        service = ProgramService(repo)
+
+        result = await service.get_program(_PROGRAM_ID)
+
+        assert isinstance(result, ProgramRead)
+        assert result.id == _PROGRAM_ID
+        assert result.program_code == "M0200"
+        assert result.program_name == "Psicología"
+        assert result.snies_code == 12345
+        repo.get_by_id.assert_awaited_once_with(_PROGRAM_ID)
+
+
+# ===================================================================
+# Get: not found (Requirement 4.2)
+# ===================================================================
+
+
+class TestGetProgramNotFound:
+    @pytest.mark.anyio
+    async def test_get_program_not_found_returns_404(self):
+        """Non-existent program_id must raise HTTPException 404."""
+        repo = _make_repo()
+        repo.get_by_id.return_value = None
+        service = ProgramService(repo)
+
+        with pytest.raises(HTTPException) as exc_info:
+            await service.get_program(_PROGRAM_ID)
+
+        assert exc_info.value.status_code == 404
+        assert exc_info.value.detail == "Programa no encontrado"
+        repo.get_by_id.assert_awaited_once_with(_PROGRAM_ID)

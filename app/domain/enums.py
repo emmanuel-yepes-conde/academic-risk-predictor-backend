@@ -21,3 +21,10 @@ class UserStatusEnum(str, Enum):
 class CourseStatusEnum(str, Enum):
     ACTIVE = "ACTIVE"
     INACTIVE = "INACTIVE"
+
+
+class EnrollmentStatusEnum(str, Enum):
+    PENDING = "PENDING"
+    ACTIVE = "ACTIVE"
+    COMPLETED = "COMPLETED"
+    CANCELLED = "CANCELLED"

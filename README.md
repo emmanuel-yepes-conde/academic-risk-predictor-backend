@@ -78,13 +78,15 @@ academic-risk-predictor-backend/
 │   │   ├── auth.py                      # POST /api/v1/login, /register, /refresh
 │   │   ├── prediction.py                # POST /api/v1/predict, /chat
 │   │   ├── users.py                     # CRUD /api/v1/users
-│   │   ├── programs.py                  # GET /api/v1/programs/{id}/courses
-│   │   └── courses.py                   # Asignación profesor-curso, estudiantes
+│   │   ├── programs.py                  # CRUD /api/v1/programs, GET by ID
+│   │   ├── courses.py                   # Asignación profesor-curso, estudiantes
+│   │   └── enrollments.py               # CRUD /api/v1/enrollments
 │   ├── application/
 │   │   ├── schemas/                     # DTOs Pydantic
 │   │   │   ├── user.py
 │   │   │   ├── consent.py
 │   │   │   ├── course.py
+│   │   │   ├── enrollment.py
 │   │   │   ├── program.py
 │   │   │   ├── professor_course.py
 │   │   │   └── audit_log.py
@@ -92,6 +94,7 @@ academic-risk-predictor-backend/
 │   │       ├── user_service.py
 │   │       ├── auth_service.py
 │   │       ├── consent_service.py
+│   │       ├── enrollment_service.py
 │   │       ├── professor_course_service.py
 │   │       ├── token_service.py
 │   │       └── ml_service.py
@@ -99,7 +102,7 @@ academic-risk-predictor-backend/
 │   │   ├── config.py                    # Settings (pydantic-settings)
 │   │   └── security.py
 │   ├── domain/
-│   │   ├── enums.py                     # RoleEnum, UserStatusEnum, OperationEnum
+│   │   ├── enums.py                     # RoleEnum, UserStatusEnum, OperationEnum, EnrollmentStatusEnum
 │   │   └── interfaces/                  # Contratos de repositorios
 │   ├── infrastructure/
 │   │   ├── database.py                  # Engine async + get_session
@@ -117,7 +120,9 @@ academic-risk-predictor-backend/
 │       ├── 0006_simplify_program_course_model.py
 │       ├── 0007_simplify_professor_course_model.py
 │       ├── 0008_add_course_status.py
-│       └── 0009_drop_pensum_and_academic_group_from_programs.py
+│       ├── 0009_drop_pensum_and_academic_group_from_programs.py
+│       ├── 0010_add_enrollment_status.py
+│       └── 0011_add_pending_completed_enrollment_status.py
 ├── datasets/                            # Dataset de entrenamiento (.csv)
 ├── ml_models/                           # Artefactos ML (.joblib, generados)
 ├── tests/
@@ -261,6 +266,9 @@ erDiagram
         uuid id PK
         uuid student_id FK
         uuid course_id FK
+        string status "PENDING | ACTIVE | COMPLETED | CANCELLED"
+        datetime enrollment_date
+        datetime updated_at
     }
     professor_courses {
         uuid id PK
@@ -417,7 +425,29 @@ Respuesta paginada:
 
 | Método | Ruta | Descripción |
 |---|---|---|
+| GET | `/api/v1/programs/{program_id}` | Obtener un programa académico por ID |
 | GET | `/api/v1/programs/{program_id}/courses` | Listar cursos de un programa (404 si no existe) |
+
+#### `GET /api/v1/programs/{program_id}`
+
+Retorna los datos de un programa académico por su ID. Accesible para cualquier usuario autenticado (STUDENT, PROFESSOR, ADMIN).
+
+Respuesta `200`:
+```json
+{
+  "id": "uuid",
+  "institution": "Universidad Ejemplo",
+  "degree_type": "Pregrado",
+  "program_code": "ING-SIS",
+  "program_name": "Ingeniería de Sistemas",
+  "location": "Bogotá",
+  "snies_code": 12345,
+  "created_at": "2025-01-01T00:00:00Z"
+}
+```
+
+Errores:
+- `404` — Programa no encontrado
 
 #### `GET /api/v1/programs/{program_id}/courses`
 
@@ -465,6 +495,111 @@ Request body:
 Retorna los estudiantes inscritos en el curso indicado. El profesor solicitante debe estar asignado al curso (RB-04). Retorna 403 si el profesor no está asignado.
 
 Query param: `professor_id` (obligatorio) — ID del profesor que solicita el acceso.
+
+---
+
+### Inscripciones (Enrollments)
+
+| Método | Ruta | Rol requerido | Status | Descripción |
+|--------|------|---------------|--------|-------------|
+| POST | `/api/v1/enrollments` | ADMIN | 201 | Inscribir estudiante en curso |
+| PATCH | `/api/v1/enrollments/{enrollment_id}` | ADMIN | 200 | Cambiar curso de inscripción |
+| PATCH | `/api/v1/enrollments/{enrollment_id}/status` | ADMIN | 200 | Actualizar estado de inscripción |
+| GET | `/api/v1/enrollments/{enrollment_id}` | ADMIN | 200 | Detalle de inscripción |
+| GET | `/api/v1/students/{student_id}/enrollments` | STUDENT (auto-acceso), ADMIN, PROFESSOR | 200 | Listar inscripciones de un estudiante |
+
+#### `POST /api/v1/enrollments`
+
+Inscribe un estudiante en un curso. Si ya existe una inscripción cancelada para la misma combinación `(student_id, course_id)`, se reactiva en lugar de crear una nueva. Requiere rol ADMIN.
+
+Request body:
+```json
+{
+  "student_id": "uuid",
+  "course_id": "uuid"
+}
+```
+
+Respuesta `201`:
+```json
+{
+  "id": "uuid",
+  "student_id": "uuid",
+  "course_id": "uuid",
+  "status": "ACTIVE",
+  "enrollment_date": "2025-01-01T00:00:00Z",
+  "updated_at": "2025-01-01T00:00:00Z"
+}
+```
+
+Errores:
+- `422` — El usuario no existe o no tiene rol de estudiante
+- `404` — Curso no encontrado
+- `409` — El estudiante ya está inscrito en este curso
+
+#### `PATCH /api/v1/enrollments/{enrollment_id}`
+
+Actualiza el curso de una inscripción existente. Valida que el curso destino exista, esté activo y que no exista una inscripción activa duplicada. Requiere rol ADMIN.
+
+Request body:
+```json
+{
+  "course_id": "uuid"
+}
+```
+
+Errores:
+- `404` — Inscripción no encontrada / Curso no encontrado
+- `409` — El estudiante ya está inscrito en el curso destino
+
+#### `PATCH /api/v1/enrollments/{enrollment_id}/status`
+
+Actualiza el estado de una inscripción a cualquier estado válido: PENDING, ACTIVE, COMPLETED o CANCELLED. El registro se preserva en la base de datos con el campo `status` actualizado. Requiere rol ADMIN.
+
+Request body:
+```json
+{
+  "status": "COMPLETED"
+}
+```
+
+Valores válidos para `status`: `PENDING`, `ACTIVE`, `COMPLETED`, `CANCELLED`.
+
+Errores:
+- `404` — Inscripción no encontrada
+- `422` — Valor de estado inválido
+
+#### `GET /api/v1/enrollments/{enrollment_id}`
+
+Retorna los datos completos de una inscripción específica. Requiere rol ADMIN.
+
+Errores:
+- `404` — Inscripción no encontrada
+
+#### `GET /api/v1/students/{student_id}/enrollments`
+
+Retorna la lista de inscripciones de un estudiante. Soporta auto-acceso para estudiantes: si el JWT tiene rol STUDENT y el `sub` coincide con el `student_id` del path, se permite el acceso y se retornan inscripciones en todos los estados (para la vista "Mi Progreso"). Si el usuario es PROFESSOR, solo retorna inscripciones en cursos asignados al profesor (RB-04). Si el usuario es ADMIN, retorna inscripciones activas por defecto. Requiere rol STUDENT (auto-acceso), ADMIN o PROFESSOR.
+
+Query params:
+- `status` (opcional): Filtrar por estado de inscripción. Valores válidos: `PENDING`, `ACTIVE`, `COMPLETED`, `CANCELLED`. Si no se proporciona, el comportamiento depende del rol (STUDENT: todos los estados, ADMIN: solo ACTIVE, PROFESSOR: filtrado por cursos del profesor).
+
+Respuesta `200`:
+```json
+[
+  {
+    "id": "uuid",
+    "student_id": "uuid",
+    "course_id": "uuid",
+    "status": "ACTIVE",
+    "enrollment_date": "2025-01-01T00:00:00Z",
+    "updated_at": "2025-01-01T00:00:00Z"
+  }
+]
+```
+
+Errores:
+- `403` — STUDENT intentando acceder a inscripciones de otro estudiante
+- `422` — Valor de `status` inválido
 
 ---
 

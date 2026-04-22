@@ -1,5 +1,6 @@
 """
 ProgramService — lógica de negocio para operaciones CRUD de programas.
+Requirements: 4.1, 4.2, 5.3
 """
 
 from uuid import UUID
@@ -65,4 +66,16 @@ class ProgramService:
         if program is None:
             raise HTTPException(status_code=404, detail="Programa no encontrado")
 
+        return ProgramRead.model_validate(program)
+
+    async def get_program(self, program_id: UUID) -> ProgramRead:
+        """
+        Obtiene un programa por su ID.
+        Lanza HTTPException(404) si no existe.
+
+        Requirements: 4.1, 4.2
+        """
+        program = await self._repo.get_by_id(program_id)
+        if program is None:
+            raise HTTPException(status_code=404, detail="Programa no encontrado")
         return ProgramRead.model_validate(program)
