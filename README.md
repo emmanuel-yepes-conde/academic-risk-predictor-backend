@@ -114,7 +114,10 @@ academic-risk-predictor-backend/
 │       ├── 0003_add_programs_and_student_profiles.py
 │       ├── 0004_add_university_and_multi_university_support.py
 │       ├── 0005_add_campus_hierarchy.py
-│       └── 0006_simplify_program_course_model.py
+│       ├── 0006_simplify_program_course_model.py
+│       ├── 0007_simplify_professor_course_model.py
+│       ├── 0008_add_course_status.py
+│       └── 0009_drop_pensum_and_academic_group_from_programs.py
 ├── datasets/                            # Dataset de entrenamiento (.csv)
 ├── ml_models/                           # Artefactos ML (.joblib, generados)
 ├── tests/
@@ -224,7 +227,6 @@ erDiagram
         string degree_type
         string program_code UK
         string program_name
-        string academic_group
         string location
         int snies_code UK
         datetime created_at

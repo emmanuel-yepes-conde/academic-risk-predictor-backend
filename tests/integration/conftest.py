@@ -139,7 +139,6 @@ def make_program(**kwargs) -> Program:
         degree_type="PREG",
         program_code=f"P{uuid.uuid4().hex[:6].upper()}",
         program_name="Test Program",
-        academic_group="MFPSI",
         location="SAN BENITO",
         snies_code=int(uuid.uuid4().int % 100000),
         created_at=now(),

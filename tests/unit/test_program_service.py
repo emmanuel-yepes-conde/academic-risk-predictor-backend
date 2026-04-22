@@ -42,7 +42,6 @@ def _make_program(
     degree_type: str = "PREG",
     program_code: str = "M0200",
     program_name: str = "Psicología",
-    academic_group: str = "MFPSI",
     location: str = "SAN BENITO",
     snies_code: int = 12345,
 ) -> MagicMock:
@@ -53,7 +52,6 @@ def _make_program(
     program.degree_type = degree_type
     program.program_code = program_code
     program.program_name = program_name
-    program.academic_group = academic_group
     program.location = location
     program.snies_code = snies_code
     program.created_at = datetime.now(timezone.utc)
@@ -74,7 +72,6 @@ def _valid_create_data() -> ProgramCreate:
         degree_type="PREG",
         program_code="M0200",
         program_name="Psicología",
-        academic_group="MFPSI",
         location="SAN BENITO",
         snies_code=12345,
     )

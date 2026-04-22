@@ -54,7 +54,6 @@ def _make_program(**kwargs) -> Program:
         degree_type="PREG",
         program_code=f"P{uuid.uuid4().hex[:6].upper()}",
         program_name="Psicología",
-        academic_group="MFPSI",
         location="SAN BENITO",
         snies_code=int(uuid.uuid4().int % 100000),
         created_at=datetime.now(timezone.utc),
@@ -68,7 +67,6 @@ VALID_PROGRAM_BODY = {
     "degree_type": "PREG",
     "program_code": "M0200",
     "program_name": "Psicología",
-    "academic_group": "MFPSI",
     "location": "SAN BENITO",
     "snies_code": 12345,
 }

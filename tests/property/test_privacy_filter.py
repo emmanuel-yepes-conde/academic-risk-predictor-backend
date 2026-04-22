@@ -124,7 +124,6 @@ def _make_program() -> Program:
         degree_type="PREG",
         program_code=f"P{uid.hex[:6].upper()}",
         program_name="Test Program",
-        academic_group="MFPSI",
         location="SAN BENITO",
         snies_code=int(uid.int % 100000),
         created_at=_now(),

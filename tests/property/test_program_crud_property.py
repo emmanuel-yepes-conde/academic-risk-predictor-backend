@@ -24,7 +24,6 @@ ALL_REQUIRED_FIELDS = {
     "degree_type": "PREG",
     "program_code": "M0200",
     "program_name": "Psicología",
-    "academic_group": "MFPSI",
     "location": "SAN BENITO",
     "snies_code": 12345,
 }
@@ -92,7 +91,6 @@ valid_program_data_st = st.fixed_dictionaries({
     "degree_type": st.text(min_size=1, max_size=10).filter(lambda s: s.strip()),
     "program_code": program_code_st,
     "program_name": st.text(min_size=1, max_size=50).filter(lambda s: s.strip()),
-    "academic_group": st.text(min_size=1, max_size=10).filter(lambda s: s.strip()),
     "location": st.text(min_size=1, max_size=30).filter(lambda s: s.strip()),
     "snies_code": snies_code_st,
 })
@@ -230,7 +228,7 @@ async def test_creation_registers_insert_audit_log(data: dict):
 # ---------------------------------------------------------------------------
 
 UPDATABLE_FIELDS = ["institution", "degree_type", "program_code",
-                    "program_name", "academic_group", "location", "snies_code"]
+                    "program_name", "location", "snies_code"]
 
 # Strategy: generate a non-empty subset of fields to update
 update_fields_st = st.lists(
@@ -318,7 +316,6 @@ def _make_mock_program(data: dict, program_id: uuid.UUID | None = None) -> Magic
     prog.degree_type = data.get("degree_type", "PREG")
     prog.program_code = data.get("program_code", "CODE")
     prog.program_name = data.get("program_name", "Name")
-    prog.academic_group = data.get("academic_group", "GRP")
     prog.location = data.get("location", "LOC")
     prog.snies_code = data.get("snies_code", 1)
     prog.created_at = __import__("datetime").datetime.now(
@@ -529,7 +526,7 @@ async def test_self_update_with_own_snies_code_succeeds(data: dict):
 # Strategy: generate a non-empty subset of ProgramUpdate fields to SET
 _PROGRAM_UPDATE_FIELDS = [
     "institution", "degree_type", "program_code",
-    "program_name", "academic_group", "location", "snies_code",
+    "program_name", "location", "snies_code",
 ]
 
 partial_fields_st = st.lists(

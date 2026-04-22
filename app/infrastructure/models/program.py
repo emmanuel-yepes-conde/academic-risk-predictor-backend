@@ -17,7 +17,6 @@ class Program(SQLModel, table=True):
     degree_type: str = Field(nullable=False)           # Grado (ej. PREG)
     program_code: str = Field(unique=True, nullable=False, index=True)  # Prog_Acad (ej. M0200)
     program_name: str = Field(nullable=False)          # Nombre_Programa
-    academic_group: str = Field(nullable=False)        # Gp_Acad (ej. MFPSI)
     location: str = Field(nullable=False)              # Ubicación_Prog (ej. SAN BENITO)
     snies_code: int = Field(unique=True, nullable=False, index=True)  # Código_SNIES (ej. 1361)
     created_at: datetime = Field(
