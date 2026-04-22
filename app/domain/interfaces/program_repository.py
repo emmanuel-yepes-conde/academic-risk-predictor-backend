@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 if TYPE_CHECKING:
+    from app.application.schemas.program import ProgramUpdate
     from app.infrastructure.models.program import Program
 
 
@@ -19,3 +20,15 @@ class IProgramRepository(ABC):
 
     @abstractmethod
     async def count_all(self) -> int: ...
+
+    @abstractmethod
+    async def create(self, data: dict) -> Program: ...
+
+    @abstractmethod
+    async def update(self, program_id: UUID, data: ProgramUpdate) -> Program | None: ...
+
+    @abstractmethod
+    async def get_by_program_code(self, program_code: str) -> Program | None: ...
+
+    @abstractmethod
+    async def get_by_snies_code(self, snies_code: int) -> Program | None: ...
