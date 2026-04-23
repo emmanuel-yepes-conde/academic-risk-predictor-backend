@@ -27,9 +27,7 @@ from app.infrastructure.models.audit_log import AuditLog
 from app.infrastructure.models.consent import Consent
 from app.infrastructure.models.course import Course
 from app.infrastructure.models.enrollment import Enrollment
-from app.infrastructure.models.professor_course import ProfessorCourse
 from app.infrastructure.models.program import Program
-from app.infrastructure.models.university import University
 from app.infrastructure.models.user import User
 
 
@@ -38,12 +36,10 @@ from app.infrastructure.models.user import User
 # ---------------------------------------------------------------------------
 
 ALL_TABLES = [
-    University.__table__,
     Program.__table__,
     User.__table__,
     Course.__table__,
     Enrollment.__table__,
-    ProfessorCourse.__table__,
     Consent.__table__,
     AuditLog.__table__,
 ]
@@ -136,31 +132,13 @@ def make_user(**kwargs) -> User:
     return User(**defaults)
 
 
-def make_university(**kwargs) -> University:
-    defaults = dict(
-        id=uuid.uuid4(),
-        name="Test University",
-        code=f"TU{uuid.uuid4().hex[:6].upper()}",
-        country="Colombia",
-        city="Bogotá",
-        active=True,
-        created_at=now(),
-    )
-    defaults.update(kwargs)
-    return University(**defaults)
-
-
 def make_program(**kwargs) -> Program:
     defaults = dict(
         id=uuid.uuid4(),
-        campus_id=uuid.uuid4(),
-        university_id=uuid.uuid4(),
         institution="USBCO",
         degree_type="PREG",
         program_code=f"P{uuid.uuid4().hex[:6].upper()}",
         program_name="Test Program",
-        pensum=f"PEN{uuid.uuid4().hex[:8]}",
-        academic_group="MFPSI",
         location="SAN BENITO",
         snies_code=int(uuid.uuid4().int % 100000),
         created_at=now(),

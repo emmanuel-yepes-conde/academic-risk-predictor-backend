@@ -16,11 +16,10 @@ import pytest
 from hypothesis import given, settings as h_settings, HealthCheck, assume
 from hypothesis import strategies as st
 
-from app.application.schemas.professor_course import ProfessorCourseRead
+from app.application.schemas.professor_course import ProfessorAssignmentRead
 from app.application.services.professor_course_service import ProfessorCourseService
 from app.domain.enums import RoleEnum, UserStatusEnum
 from app.infrastructure.models.course import Course
-from app.infrastructure.models.professor_course import ProfessorCourse
 from app.infrastructure.models.user import User
 
 # ---------------------------------------------------------------------------
@@ -56,6 +55,7 @@ def _make_course(course_id: UUID) -> Course:
         credits=3,
         academic_period="2026-1",
         program_id=uuid4(),
+        professor_id=None,
     )
 
 
@@ -64,16 +64,14 @@ def _build_service(course_id: UUID, professor_ids: list[UUID]):
     Build a ProfessorCourseService with a fully mocked session that
     simulates the DB state for sequential professor assignments.
 
-    Returns (service, state_dict) where state_dict tracks the current
-    ProfessorCourse assignment for assertions.
+    The service updates Course.professor_id directly (no intermediate table).
+
+    Returns (service, course) where course tracks the current professor_id.
     """
     session = AsyncMock()
-    state = {"current_assignment": None}
 
     course = _make_course(course_id)
     professors = {pid: _make_professor_user(pid) for pid in professor_ids}
-
-    # --- Mock session.execute to handle different SELECT queries ---
 
     class FakeScalarResult:
         def __init__(self, value):
@@ -82,74 +80,39 @@ def _build_service(course_id: UUID, professor_ids: list[UUID]):
         def scalar_one_or_none(self):
             return self._value
 
-    # We need to track which query is being made. The service issues
-    # three types of SELECT in assign_professor:
-    #   1. select(User).where(User.id == professor_id)  → professor lookup
-    #   2. select(ProfessorCourse).where(ProfessorCourse.course_id == ...)
-    #      → existing assignment lookup
-    #
-    # The course lookup is done via self._course_repo.obtener_por_id()
-    # which we mock separately.
-
-    call_counter = {"n": 0}
-
     async def mock_execute(stmt):
-        """
-        The service calls session.execute twice per assign_professor call:
-          1st call: select(User) — professor lookup
-          2nd call: select(ProfessorCourse) — existing assignment lookup
-        We alternate based on a counter that resets every 2 calls.
-        """
-        idx = call_counter["n"] % 2
-        call_counter["n"] += 1
+        """Return the professor User for the User lookup query."""
+        try:
+            compiled = stmt.compile()
+            params = compiled.params
+        except Exception:
+            params = {}
 
-        if idx == 0:
-            # 1st call in the pair: User lookup
-            # Extract professor_id from the call args by inspecting
-            # the compiled statement's whereclause
-            for pid, prof in professors.items():
-                try:
-                    compiled = stmt.compile(
-                        compile_kwargs={"literal_binds": True}
-                    )
-                    if str(pid) in str(compiled):
-                        return FakeScalarResult(prof)
-                except Exception:
-                    pass
-            # Fallback: return the professor for the current call
-            # based on the sequence
-            assign_idx = (call_counter["n"] - 1) // 2
-            if assign_idx < len(professor_ids):
-                pid = professor_ids[assign_idx]
-                return FakeScalarResult(professors.get(pid))
-            return FakeScalarResult(None)
-        else:
-            # 2nd call in the pair: ProfessorCourse lookup
-            return FakeScalarResult(state["current_assignment"])
+        # Extract the bound user id from the WHERE clause parameters
+        for key, value in params.items():
+            if value in professors:
+                return FakeScalarResult(professors[value])
+
+        return FakeScalarResult(None)
 
     session.execute = AsyncMock(side_effect=mock_execute)
-
-    def mock_add(obj):
-        if isinstance(obj, ProfessorCourse):
-            state["current_assignment"] = obj
-
-    session.add = MagicMock(side_effect=mock_add)
+    session.add = MagicMock()
     session.flush = AsyncMock()
 
     async def mock_refresh(obj):
-        if isinstance(obj, ProfessorCourse) and obj.id is None:
-            obj.id = uuid4()
+        pass  # Course already has an id
 
     session.refresh = AsyncMock(side_effect=mock_refresh)
 
     # Build the service manually to inject mocks
     service = object.__new__(ProfessorCourseService)
     service._session = session
-    service._audit = AsyncMock()  # Mock audit to avoid side effects
+    service._audit = AsyncMock()
+    service._audit.register = AsyncMock()
     service._course_repo = AsyncMock()
     service._course_repo.obtener_por_id = AsyncMock(return_value=course)
 
-    return service, state
+    return service, course
 
 
 # ---------------------------------------------------------------------------
@@ -181,25 +144,23 @@ async def test_course_has_exactly_one_professor_after_sequential_assignments(
     Each intermediate assignment must also result in exactly one professor.
 
     Specifically:
-      - After each assign_professor(C, Pi), the returned ProfessorCourseRead
+      - After each assign_professor(C, Pi), the returned ProfessorAssignmentRead
         must reference course_id == C and professor_id == Pi
-      - After all assignments, the internal state must have exactly one
-        assignment record for course C
-      - That single record must reference the last professor in the sequence
+      - After all assignments, Course.professor_id must equal the last professor
 
     **Validates: Requirements 4.1, 4.2**
     """
     assume(course_id not in professor_ids)
 
-    service, state = _build_service(course_id, professor_ids)
+    service, course = _build_service(course_id, professor_ids)
 
     last_result = None
     for i, professor_id in enumerate(professor_ids):
         result = await service.assign_professor(course_id, professor_id)
 
-        # --- Each assignment must return a valid ProfessorCourseRead ---
-        assert isinstance(result, ProfessorCourseRead), (
-            f"Assignment {i+1}: expected ProfessorCourseRead, "
+        # --- Each assignment must return a valid ProfessorAssignmentRead ---
+        assert isinstance(result, ProfessorAssignmentRead), (
+            f"Assignment {i+1}: expected ProfessorAssignmentRead, "
             f"got {type(result).__name__}"
         )
 
@@ -222,23 +183,11 @@ async def test_course_has_exactly_one_professor_after_sequential_assignments(
 
         last_result = result
 
-    # --- After all assignments, exactly one assignment must exist ---
-    final_assignment = state["current_assignment"]
-    assert final_assignment is not None, (
-        "After all assignments, there must be an active assignment"
-    )
-
-    # --- The final assignment must reference the last professor ---
+    # --- After all assignments, Course.professor_id must be the last professor ---
     last_professor_id = professor_ids[-1]
-    assert final_assignment.professor_id == last_professor_id, (
-        f"Final assignment professor_id mismatch: "
-        f"expected {last_professor_id}, got {final_assignment.professor_id}"
-    )
-
-    # --- The final assignment must reference the correct course ---
-    assert final_assignment.course_id == course_id, (
-        f"Final assignment course_id mismatch: "
-        f"expected {course_id}, got {final_assignment.course_id}"
+    assert course.professor_id == last_professor_id, (
+        f"Final Course.professor_id mismatch: "
+        f"expected {last_professor_id}, got {course.professor_id}"
     )
 
     # --- The last returned result must match the final state ---

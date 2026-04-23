@@ -15,8 +15,8 @@ from app.application.schemas.audit_log import AuditLogCreate
 from app.application.schemas.user import UserCreate, UserUpdate
 from app.domain.enums import OperationEnum, RoleEnum, UserStatusEnum
 from app.domain.interfaces.user_repository import IUserRepository
+from app.infrastructure.models.course import Course
 from app.infrastructure.models.enrollment import Enrollment
-from app.infrastructure.models.professor_course import ProfessorCourse
 from app.infrastructure.models.user import User
 from app.infrastructure.repositories.audit_log_repository import AuditLogRepository
 
@@ -39,15 +39,15 @@ class UserRepository(IUserRepository):
         is applied in UserService, not here.
         """
         if professor_id is not None:
-            # RB-04: JOIN through Enrollment and ProfessorCourse
+            # RB-04: JOIN through Enrollment and Course.professor_id
             stmt = (
                 select(User)
                 .join(Enrollment, Enrollment.student_id == User.id)
                 .join(
-                    ProfessorCourse,
-                    ProfessorCourse.course_id == Enrollment.course_id,
+                    Course,
+                    Course.id == Enrollment.course_id,
                 )
-                .where(ProfessorCourse.professor_id == professor_id)
+                .where(Course.professor_id == professor_id)
                 .distinct()
             )
         else:

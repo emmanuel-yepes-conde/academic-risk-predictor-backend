@@ -21,8 +21,8 @@ from hypothesis import given, settings as h_settings, HealthCheck, assume
 from hypothesis import strategies as st
 
 from app.application.services.professor_course_service import ProfessorCourseService
+from app.infrastructure.models.course import Course
 from app.infrastructure.models.enrollment import Enrollment
-from app.infrastructure.models.professor_course import ProfessorCourse
 
 
 # ---------------------------------------------------------------------------
@@ -52,16 +52,14 @@ def _build_service(
     Build a ProfessorCourseService with mocked dependencies.
 
     The write_grade flow:
-      1. verify_professor_assigned_to_course → session.execute(select(ProfessorCourse)...)
-         → raises 403 if not assigned
+      1. verify_professor_assigned_to_course → _course_repo.obtener_por_id(course_id)
+         → checks course.professor_id == professor_id, raises 403 if not
       2. session.execute(select(Enrollment)...) → checks student enrollment
       3. audit.register(...) → logs the operation
 
-    We mock session.execute to:
-      - Return a ProfessorCourse when the course is in assigned_course_ids
-        and the query is for ProfessorCourse
-      - Return an Enrollment when the student is enrolled in the course
-        and the query is for Enrollment
+    We mock _course_repo.obtener_por_id to return a Course with the correct
+    professor_id when the course is assigned, and session.execute for
+    Enrollment lookups.
     """
     session = AsyncMock()
 
@@ -74,9 +72,7 @@ def _build_service(
 
     async def mock_execute(stmt):
         """
-        Intercept session.execute calls.
-        Distinguish between ProfessorCourse and Enrollment queries
-        by inspecting the compiled statement's bind parameters.
+        Intercept session.execute calls for Enrollment lookups.
         """
         try:
             compiled = stmt.compile()
@@ -84,8 +80,6 @@ def _build_service(
         except Exception:
             params = {}
 
-        # Detect which table is being queried by checking parameter names
-        has_professor_id_param = any("professor_id" in k for k in params)
         has_student_id_param = any("student_id" in k for k in params)
 
         bound_course_id = None
@@ -113,21 +107,32 @@ def _build_service(
                 )
             return FakeScalarResult(None)
 
-        elif has_professor_id_param and bound_course_id is not None:
-            # This is a ProfessorCourse lookup
-            if bound_course_id in assigned_course_ids:
-                return FakeScalarResult(
-                    ProfessorCourse(
-                        id=uuid4(),
-                        professor_id=professor_id,
-                        course_id=bound_course_id,
-                    )
-                )
-            return FakeScalarResult(None)
-
         return FakeScalarResult(None)
 
     session.execute = AsyncMock(side_effect=mock_execute)
+
+    # Mock course_repo.obtener_por_id to return Course with correct professor_id
+    async def mock_obtener_por_id(course_id):
+        if course_id in assigned_course_ids:
+            return Course(
+                id=course_id,
+                code=f"COURSE-{course_id}",
+                name=f"Course {course_id}",
+                credits=3,
+                academic_period="2026-1",
+                program_id=uuid4(),
+                professor_id=professor_id,
+            )
+        else:
+            return Course(
+                id=course_id,
+                code=f"COURSE-{course_id}",
+                name=f"Course {course_id}",
+                credits=3,
+                academic_period="2026-1",
+                program_id=uuid4(),
+                professor_id=None,
+            )
 
     # Build the service with injected mocks
     service = object.__new__(ProfessorCourseService)
@@ -135,6 +140,7 @@ def _build_service(
     service._audit = AsyncMock()
     service._audit.register = AsyncMock()
     service._course_repo = AsyncMock()
+    service._course_repo.obtener_por_id = AsyncMock(side_effect=mock_obtener_por_id)
 
     return service
 

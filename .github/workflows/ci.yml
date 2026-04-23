@@ -1,0 +1,111 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main, develop]
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: mpra_test
+          POSTGRES_PASSWORD: mpra_test_pass
+          POSTGRES_DB: mpra_test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U mpra_test"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    env:
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_USER: mpra_test
+      DB_PASSWORD: mpra_test_pass
+      DB_NAME: mpra_test_db
+      JWT_SECRET_KEY: test-jwt-secret-key-for-ci
+      DATABASE_URL: postgresql+asyncpg://mpra_test:mpra_test_pass@localhost:5432/mpra_test_db
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Esperar PostgreSQL
+        run: |
+          until pg_isready -h localhost -p 5432 -U mpra_test; do
+            echo "Esperando a PostgreSQL..."
+            sleep 2
+          done
+
+      - name: Ejecutar migraciones Alembic
+        run: alembic upgrade head
+
+      - name: Ejecutar tests con cobertura
+        run: python3 -m pytest tests/ -v --cov=app --cov-report=xml --cov-report=term-missing
+
+      - name: Publicar reporte de cobertura
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: coverage.xml
+
+      - name: Verificar umbral de cobertura
+        if: always()
+        run: |
+          if [ -f coverage.xml ]; then
+            COVERAGE=$(python3 -c "
+          import xml.etree.ElementTree as ET
+          tree = ET.parse('coverage.xml')
+          root = tree.getroot()
+          rate = float(root.attrib.get('line-rate', 0))
+          print(f'{rate * 100:.1f}')
+          ")
+            echo "Cobertura: ${COVERAGE}%"
+            if (( $(echo "$COVERAGE < 80" | bc -l) )); then
+              echo "::warning::⚠️ La cobertura de código (${COVERAGE}%) está por debajo del umbral del 80%"
+              echo "### ⚠️ Advertencia de Cobertura" >> $GITHUB_STEP_SUMMARY
+              echo "La cobertura de código actual es **${COVERAGE}%**, por debajo del umbral mínimo del **80%**." >> $GITHUB_STEP_SUMMARY
+            else
+              echo "✅ Cobertura por encima del umbral: ${COVERAGE}%"
+            fi
+          fi
+
+  validate-bicep:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Azure CLI Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Validar Bicep
+        run: az bicep build --file infra/main.bicep

@@ -9,9 +9,10 @@ class ProfessorAssign(BaseModel):
     professor_id: UUID = Field(..., description="ID del usuario con rol PROFESSOR a asignar al curso")
 
 
-class ProfessorCourseRead(BaseModel):
+class ProfessorAssignmentRead(BaseModel):
+    """Respuesta de compatibilidad para POST /courses/{course_id}/professor."""
     id: UUID
     professor_id: UUID
     course_id: UUID
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": False}
