@@ -204,7 +204,7 @@ deploy() {
     local rg_name="rg-mpra-${ENV_NAME}"
     local bicep_file="${SCRIPT_DIR}/main.bicep"
 
-    log_info "Iniciando despliegue del entorno '${ENV_NAME}' en región '${REGION}' (5 pasos)..."
+    log_info "Iniciando despliegue del entorno '${ENV_NAME}' en región '${REGION}' (6 pasos)..."
     log_info "Resource Group: ${rg_name}"
 
     # Verificar que el archivo Bicep existe
@@ -227,7 +227,7 @@ deploy() {
     # -----------------------------------------------------------------------
     # Paso 2: Desplegar plantilla Bicep
     # -----------------------------------------------------------------------
-    log_info "Paso 2/5: Desplegando plantilla Bicep..."
+    log_info "Paso 2/6: Desplegando infraestructura con Bicep (ACR, PostgreSQL, Container App Environment)..."
     local deployment_output
     if ! deployment_output=$(az deployment group create \
         --resource-group "${rg_name}" \
@@ -235,74 +235,136 @@ deploy() {
         --parameters \
             environmentName="${ENV_NAME}" \
             dbAdminPassword="${DB_PASSWORD}" \
-            jwtSecretKey="${JWT_SECRET}" \
         --output json 2>&1); then
         log_error "Falló el despliegue de la plantilla Bicep."
         log_error "Detalle: ${deployment_output}"
         exit 1
     fi
-    log_success "Plantilla Bicep desplegada correctamente."
+    log_success "Infraestructura Bicep desplegada correctamente."
 
     # -----------------------------------------------------------------------
     # Paso 3: Capturar outputs del despliegue
     # -----------------------------------------------------------------------
-    log_info "Paso 3/5: Capturando outputs del despliegue..."
+    log_info "Paso 3/6: Capturando outputs del despliegue..."
 
-    local acr_name acr_login_server fqdn postgres_host ca_name
+    local acr_name acr_login_server postgres_host cae_name
+    local ca_name="ca-mpra-${ENV_NAME}"
 
     acr_name=$(echo "${deployment_output}" | jq -r '.properties.outputs.acrName.value')
     acr_login_server=$(echo "${deployment_output}" | jq -r '.properties.outputs.acrLoginServer.value')
-    fqdn=$(echo "${deployment_output}" | jq -r '.properties.outputs.containerAppFqdn.value')
     postgres_host=$(echo "${deployment_output}" | jq -r '.properties.outputs.postgresHost.value')
-    ca_name=$(echo "${deployment_output}" | jq -r '.properties.outputs.containerAppName.value')
+    cae_name=$(echo "${deployment_output}" | jq -r '.properties.outputs.containerAppEnvironmentName.value')
 
-    # Validar que los outputs se capturaron correctamente
     if [[ -z "${acr_name}" || "${acr_name}" == "null" ]]; then
         log_error "No se pudo obtener el nombre del ACR desde los outputs del despliegue."
         exit 1
     fi
-    if [[ -z "${fqdn}" || "${fqdn}" == "null" ]]; then
-        log_error "No se pudo obtener el FQDN del Container App desde los outputs del despliegue."
-        exit 1
-    fi
-    if [[ -z "${ca_name}" || "${ca_name}" == "null" ]]; then
-        log_error "No se pudo obtener el nombre del Container App desde los outputs del despliegue."
-        exit 1
-    fi
 
     log_success "Outputs capturados:"
-    log_info "  ACR Name:         ${acr_name}"
-    log_info "  ACR Login Server: ${acr_login_server}"
-    log_info "  Container App:    ${ca_name}"
-    log_info "  FQDN:             ${fqdn}"
-    log_info "  PostgreSQL Host:  ${postgres_host}"
+    log_info "  ACR:               ${acr_login_server}"
+    log_info "  Container App Env: ${cae_name}"
+    log_info "  PostgreSQL Host:   ${postgres_host}"
 
     # -----------------------------------------------------------------------
-    # Paso 4: Construir imagen Docker en ACR
+    # Paso 4: Crear o actualizar Container App via CLI
+    # (Separado del Bicep para evitar timeouts de aprovisionamiento)
     # -----------------------------------------------------------------------
-    log_info "Paso 4/5: Construyendo imagen Docker en ACR '${acr_name}'..."
+    log_info "Paso 4/6: Configurando Container App '${ca_name}'..."
+
+    local database_url="postgresql+asyncpg://mpraadmin:${DB_PASSWORD}@${postgres_host}:5432/mpra_db?sslmode=require"
+
+    if az containerapp show --name "${ca_name}" --resource-group "${rg_name}" --output none 2>/dev/null; then
+        log_info "Container App '${ca_name}' ya existe, actualizando secrets..."
+        az containerapp secret set \
+            --name "${ca_name}" \
+            --resource-group "${rg_name}" \
+            --secrets "database-url=${database_url}" "jwt-secret-key=${JWT_SECRET}" \
+            --output none
+    else
+        log_info "Creando Container App '${ca_name}'..."
+        az containerapp create \
+            --name "${ca_name}" \
+            --resource-group "${rg_name}" \
+            --environment "${cae_name}" \
+            --image "mcr.microsoft.com/azuredocs/containerapps-helloworld:latest" \
+            --target-port 8000 \
+            --ingress external \
+            --min-replicas 0 \
+            --max-replicas 1 \
+            --cpu 0.5 \
+            --memory "1Gi" \
+            --secrets "database-url=${database_url}" "jwt-secret-key=${JWT_SECRET}" \
+            --env-vars \
+                "DATABASE_URL=secretref:database-url" \
+                "JWT_SECRET_KEY=secretref:jwt-secret-key" \
+                "HOST=0.0.0.0" \
+                "PORT=8000" \
+                "LOG_LEVEL=info" \
+                "CORS_ORIGINS=*" \
+                "MODEL_PATH=ml_models/modelo_logistico.joblib" \
+                "SCALER_PATH=ml_models/scaler.joblib" \
+                "DATASET_PATH=datasets/dataset_estudiantes_decimal.csv" \
+            --system-assigned \
+            --output none
+    fi
+
+    # Asignar rol AcrPull a la identidad del Container App
+    local ca_principal_id acr_id
+    ca_principal_id=$(az containerapp show \
+        --name "${ca_name}" \
+        --resource-group "${rg_name}" \
+        --query 'identity.principalId' -o tsv)
+    acr_id=$(az acr show \
+        --name "${acr_name}" \
+        --resource-group "${rg_name}" \
+        --query 'id' -o tsv)
+
+    az role assignment create \
+        --assignee "${ca_principal_id}" \
+        --role "AcrPull" \
+        --scope "${acr_id}" \
+        --output none 2>/dev/null || log_warn "La asignación AcrPull ya existe (esto es normal en re-despliegues)."
+
+    # Vincular el ACR al Container App usando identidad administrada
+    az containerapp registry set \
+        --name "${ca_name}" \
+        --resource-group "${rg_name}" \
+        --server "${acr_login_server}" \
+        --identity system \
+        --output none
+
+    local fqdn
+    fqdn=$(az containerapp show \
+        --name "${ca_name}" \
+        --resource-group "${rg_name}" \
+        --query 'properties.configuration.ingress.fqdn' -o tsv)
+
+    log_success "Container App '${ca_name}' configurado. URL: https://${fqdn}"
+
+    # -----------------------------------------------------------------------
+    # Paso 5: Construir imagen Docker en ACR
+    # -----------------------------------------------------------------------
+    log_info "Paso 5/6: Construyendo imagen Docker en ACR '${acr_name}'..."
     if ! az acr build \
         --registry "${acr_name}" \
         --image mpra-backend:latest \
         --file "${SCRIPT_DIR}/../Dockerfile" \
         "${SCRIPT_DIR}/.." 2>&1; then
         log_error "Falló la construcción de la imagen Docker en ACR."
-        log_error "Verifica que el Dockerfile es válido y que el ACR '${acr_name}' está accesible."
         exit 1
     fi
     log_success "Imagen Docker 'mpra-backend:latest' construida y publicada en ACR."
 
     # -----------------------------------------------------------------------
-    # Paso 5: Actualizar Container App con la imagen nueva
+    # Paso 6: Actualizar Container App con la imagen real
     # -----------------------------------------------------------------------
-    log_info "Paso 5/5: Actualizando Container App '${ca_name}' con la imagen nueva..."
+    log_info "Paso 6/6: Actualizando Container App '${ca_name}' con la imagen nueva..."
     if ! az containerapp update \
         --name "${ca_name}" \
         --resource-group "${rg_name}" \
         --image "${acr_login_server}/mpra-backend:latest" \
         --output none 2>&1; then
         log_error "Falló la actualización del Container App '${ca_name}'."
-        log_error "Verifica que la imagen '${acr_login_server}/mpra-backend:latest' existe en el ACR."
         exit 1
     fi
     log_success "Container App '${ca_name}' actualizado con la imagen nueva."
