@@ -13,17 +13,26 @@ from pydantic import Field, BeforeValidator, model_validator
 def parse_cors_origins(v):
     """
     Convierte CORS_ORIGINS de string a lista si es necesario.
-    Permite usar CORS_ORIGINS=* en .env en lugar de CORS_ORIGINS=["*"]
+    Soporta: "*", '["*"]', "http://a.com,http://b.com"
     """
+    if isinstance(v, list):
+        return v
     if isinstance(v, str):
-        # Si es "*", convertir a lista con un elemento
-        if v.strip() == "*":
+        stripped = v.strip()
+        if not stripped or stripped == "*":
             return ["*"]
-        # Si es una lista separada por comas, dividir
-        if "," in v:
-            return [origin.strip() for origin in v.split(",")]
-        # Si es un solo origen, convertir a lista
-        return [v.strip()]
+        # Intentar parsear como JSON array primero
+        import json as _json
+        try:
+            parsed = _json.loads(stripped)
+            if isinstance(parsed, list):
+                return parsed
+        except _json.JSONDecodeError:
+            pass
+        # Fallback: separado por comas
+        if "," in stripped:
+            return [origin.strip() for origin in stripped.split(",")]
+        return [stripped]
     return v
 
 
