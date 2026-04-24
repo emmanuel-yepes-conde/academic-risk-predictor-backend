@@ -300,7 +300,7 @@ deploy() {
                 "HOST=0.0.0.0" \
                 "PORT=8000" \
                 "LOG_LEVEL=info" \
-                "CORS_ORIGINS=*" \
+                'CORS_ORIGINS=["*"]' \
                 "MODEL_PATH=ml_models/modelo_logistico.joblib" \
                 "SCALER_PATH=ml_models/scaler.joblib" \
                 "DATASET_PATH=datasets/dataset_estudiantes_decimal.csv" \
