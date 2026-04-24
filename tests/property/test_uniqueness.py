@@ -1,7 +1,6 @@
 # Feature: postgresql-database-integration, Property 3: Relationship uniqueness
 """
-Property-based tests for uniqueness constraints on Enrollment, ProfessorCourse
-and Consent.
+Property-based tests for uniqueness constraints on Enrollment and Consent.
 
 Verifies that attempting to INSERT a duplicate record (same composite key or
 same unique FK) raises an IntegrityError and leaves exactly one record in the
@@ -30,7 +29,6 @@ from sqlalchemy.orm import Session
 
 # Import the ORM models — they carry the UniqueConstraint metadata.
 from app.infrastructure.models.enrollment import Enrollment
-from app.infrastructure.models.professor_course import ProfessorCourse
 from app.infrastructure.models.consent import Consent
 
 # SQLModel uses SQLAlchemy metadata; we need the shared MetaData object.
@@ -57,10 +55,9 @@ def _make_engine():
         cursor.execute("PRAGMA foreign_keys=OFF")  # FKs reference other tables we don't create
         cursor.close()
 
-    # Create only the three tables we need (no FK dependencies to satisfy)
+    # Create only the two tables we need (no FK dependencies to satisfy)
     SQLModel.metadata.create_all(engine, tables=[
         Enrollment.__table__,
-        ProfessorCourse.__table__,
         Consent.__table__,
     ])
     return engine
@@ -130,51 +127,6 @@ async def test_enrollment_uniqueness(student_id: uuid.UUID, course_id: uuid.UUID
         count = _count(session, Enrollment, student_id=student_id, course_id=course_id)
         assert count == 1, (
             f"Expected exactly 1 Enrollment for ({student_id}, {course_id}), got {count}"
-        )
-
-    engine.dispose()
-
-
-@pytest.mark.anyio
-@h_settings(max_examples=25)
-@given(professor_id=st.uuids(), course_id=st.uuids())
-async def test_professor_course_uniqueness(professor_id: uuid.UUID, course_id: uuid.UUID):
-    """
-    **Validates: Requirements 4.4**
-
-    Property 3 (ProfessorCourse): For any (professor_id, course_id) pair, a
-    second INSERT with the same values must raise IntegrityError and leave
-    exactly one record in the professor_courses table.
-    """
-    engine = _make_engine()
-
-    # First INSERT in its own session — must succeed
-    with Session(engine) as session:
-        first = ProfessorCourse(
-            id=uuid.uuid4(),
-            professor_id=professor_id,
-            course_id=course_id,
-        )
-        session.add(first)
-        session.commit()
-
-    # Second INSERT in a new session — must fail with IntegrityError
-    with Session(engine) as session:
-        duplicate = ProfessorCourse(
-            id=uuid.uuid4(),
-            professor_id=professor_id,
-            course_id=course_id,
-        )
-        session.add(duplicate)
-        with pytest.raises(IntegrityError):
-            session.commit()
-        session.rollback()
-
-    # Verify exactly one record remains in a clean session
-    with Session(engine) as session:
-        count = _count(session, ProfessorCourse, professor_id=professor_id, course_id=course_id)
-        assert count == 1, (
-            f"Expected exactly 1 ProfessorCourse for ({professor_id}, {course_id}), got {count}"
         )
 
     engine.dispose()

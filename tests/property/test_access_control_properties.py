@@ -22,7 +22,7 @@ from hypothesis import strategies as st
 from app.application.schemas.user import UserRead
 from app.application.services.professor_course_service import ProfessorCourseService
 from app.domain.enums import RoleEnum, UserStatusEnum
-from app.infrastructure.models.professor_course import ProfessorCourse
+from app.infrastructure.models.course import Course
 from app.infrastructure.models.user import User
 
 
@@ -61,60 +61,38 @@ def _build_service(
     Build a ProfessorCourseService with mocked dependencies.
 
     The service's list_course_students flow:
-      1. verify_professor_assigned_to_course → session.execute(select(ProfessorCourse)...)
+      1. verify_professor_assigned_to_course → _course_repo.obtener_por_id(course_id)
+         → checks course.professor_id == professor_id, raises 403 if not
       2. _course_repo.listar_estudiantes_inscritos(course_id)
 
-    We mock session.execute to return a ProfessorCourse when the course is
-    in assigned_course_ids, and None otherwise. The course_repo mock returns
-    the students for the given course.
+    We mock _course_repo.obtener_por_id to return a Course with professor_id
+    set when the course is in assigned_course_ids.
     """
     session = AsyncMock()
 
-    class FakeScalarResult:
-        def __init__(self, value):
-            self._value = value
-
-        def scalar_one_or_none(self):
-            return self._value
-
-    # The verify_professor_assigned_to_course method builds:
-    #   select(ProfessorCourse).where(
-    #       ProfessorCourse.course_id == course_id,
-    #       ProfessorCourse.professor_id == professor_id,
-    #   )
-    # We inspect the statement's whereclause to extract the bound course_id.
-
-    async def mock_execute(stmt):
-        """
-        Intercept session.execute calls for ProfessorCourse lookups.
-        Extract the course_id from the WHERE clause bind parameters.
-        """
-        # Try to extract bind params from the compiled statement
-        try:
-            compiled = stmt.compile()
-            params = compiled.params
-        except Exception:
-            params = {}
-
-        # The WHERE clause binds course_id and professor_id as parameters.
-        # SQLAlchemy names them like 'course_id_1', 'professor_id_1'.
-        bound_course_id = None
-        for key, value in params.items():
-            if "course_id" in key:
-                bound_course_id = value
-                break
-
-        if bound_course_id is not None and bound_course_id in assigned_course_ids:
-            return FakeScalarResult(
-                ProfessorCourse(
-                    id=uuid4(),
-                    professor_id=professor_id,
-                    course_id=bound_course_id,
-                )
+    # Mock course_repo.obtener_por_id to return Course with correct professor_id
+    async def mock_obtener_por_id(course_id):
+        if course_id in assigned_course_ids:
+            return Course(
+                id=course_id,
+                code=f"COURSE-{course_id}",
+                name=f"Course {course_id}",
+                credits=3,
+                academic_period="2026-1",
+                program_id=uuid4(),
+                professor_id=professor_id,
             )
-        return FakeScalarResult(None)
-
-    session.execute = AsyncMock(side_effect=mock_execute)
+        else:
+            # Course exists but professor is not assigned
+            return Course(
+                id=course_id,
+                code=f"COURSE-{course_id}",
+                name=f"Course {course_id}",
+                credits=3,
+                academic_period="2026-1",
+                program_id=uuid4(),
+                professor_id=None,  # No professor assigned
+            )
 
     # Build the service with injected mocks
     service = object.__new__(ProfessorCourseService)
@@ -122,6 +100,7 @@ def _build_service(
     service._audit = AsyncMock()
     service._audit.register = AsyncMock()
     service._course_repo = AsyncMock()
+    service._course_repo.obtener_por_id = AsyncMock(side_effect=mock_obtener_por_id)
 
     # Mock listar_estudiantes_inscritos on the course repo
     async def mock_listar_estudiantes(course_id):

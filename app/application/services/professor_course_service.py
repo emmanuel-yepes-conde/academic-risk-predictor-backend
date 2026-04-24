@@ -2,7 +2,7 @@
 ProfessorCourseService — lógica de negocio para asignación profesor-curso
 y control de acceso RB-04.
 
-Requisitos: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 5.1, 5.2, 5.3, 5.4, 5.5
+Requisitos: 3.5, 4.1, 4.2, 4.3, 4.4, 4.5, 5.1, 5.2, 6.1, 6.2, 6.3, 6.4, 8.1, 8.2, 8.3
 """
 
 from uuid import UUID
@@ -10,16 +10,14 @@ from uuid import UUID
 from fastapi import HTTPException
 
 from app.application.schemas.audit_log import AuditLogCreate
-from app.application.schemas.professor_course import ProfessorCourseRead
+from app.application.schemas.professor_course import ProfessorAssignmentRead
 from app.application.schemas.user import UserRead
 from app.application.schemas.course import CourseRead
 from app.domain.enums import OperationEnum, RoleEnum
-from app.infrastructure.models.professor_course import ProfessorCourse
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.infrastructure.models.course import Course
 from app.infrastructure.models.enrollment import Enrollment
 from app.infrastructure.models.user import User
 from app.infrastructure.repositories.audit_log_repository import AuditLogRepository
@@ -38,20 +36,20 @@ class ProfessorCourseService:
         self._course_repo = CourseRepository(session)
 
     # ------------------------------------------------------------------
-    # 10.1 — Asignación profesor-curso (upsert)
+    # Asignación profesor-curso (directa sobre Course.professor_id)
     # ------------------------------------------------------------------
 
     async def assign_professor(
         self, course_id: UUID, professor_id: UUID
-    ) -> ProfessorCourseRead:
+    ) -> ProfessorAssignmentRead:
         """
         Asigna (o reemplaza) el profesor de un curso.
 
         - Verifica existencia del curso → 404
         - Verifica que el usuario tenga rol PROFESSOR → 422
-        - Upsert: si ya existe asignación para el curso, reemplaza el profesor
+        - Actualiza course.professor_id directamente
 
-        Requisitos: 4.1, 4.2, 4.3, 4.4
+        Requisitos: 4.1, 4.2, 4.3, 4.4, 4.5, 8.1, 8.2, 8.3
         """
         # Verificar existencia del curso
         course = await self._course_repo.obtener_por_id(course_id)
@@ -69,65 +67,66 @@ class ProfessorCourseService:
                 detail="El usuario indicado no tiene rol de profesor",
             )
 
-        # Upsert: buscar asignación existente para este curso
-        existing_result = await self._session.execute(
-            select(ProfessorCourse).where(ProfessorCourse.course_id == course_id)
-        )
-        existing = existing_result.scalar_one_or_none()
+        previous_professor_id = course.professor_id
 
-        if existing is not None:
-            previous_professor_id = existing.professor_id
-            existing.professor_id = professor_id
-            self._session.add(existing)
-            await self._session.flush()
-            await self._session.refresh(existing)
+        # Actualizar professor_id directamente en el curso
+        course.professor_id = professor_id
+        self._session.add(course)
+        await self._session.flush()
+        await self._session.refresh(course)
 
-            # Registrar en audit_log el reemplazo
+        # Determinar tipo de operación para audit log
+        if previous_professor_id is None:
+            # INSERT: curso no tenía profesor asignado
             await self._audit.register(AuditLogCreate(
-                table_name="professor_courses",
+                table_name="courses",
+                operation=OperationEnum.INSERT,
+                record_id=course.id,
+                user_id=professor_id,
+                new_data={
+                    "professor_id": str(professor_id),
+                    "course_id": str(course_id),
+                },
+            ))
+        else:
+            # UPDATE: reemplazando profesor existente
+            await self._audit.register(AuditLogCreate(
+                table_name="courses",
                 operation=OperationEnum.UPDATE,
-                record_id=existing.id,
+                record_id=course.id,
                 user_id=professor_id,
                 previous_data={"professor_id": str(previous_professor_id)},
-                new_data={"professor_id": str(professor_id)},
+                new_data={
+                    "professor_id": str(professor_id),
+                    "course_id": str(course_id),
+                },
             ))
-            return ProfessorCourseRead.model_validate(existing)
 
-        # Crear nueva asignación
-        new_assignment = ProfessorCourse(
+        return ProfessorAssignmentRead(
+            id=course.id,
             professor_id=professor_id,
-            course_id=course_id,
+            course_id=course.id,
         )
-        self._session.add(new_assignment)
-        await self._session.flush()
-        await self._session.refresh(new_assignment)
-
-        # Registrar en audit_log la nueva asignación
-        await self._audit.register(AuditLogCreate(
-            table_name="professor_courses",
-            operation=OperationEnum.INSERT,
-            record_id=new_assignment.id,
-            user_id=professor_id,
-            new_data={
-                "professor_id": str(professor_id),
-                "course_id": str(course_id),
-            },
-        ))
-        return ProfessorCourseRead.model_validate(new_assignment)
 
     async def get_course_professor(self, course_id: UUID) -> UserRead:
         """
         Retorna el profesor asignado a un curso.
         Lanza 404 si el curso no tiene profesor asignado.
 
-        Requisitos: 4.5
+        Requisitos: 5.1, 5.2
         """
-        stmt = (
-            select(User)
-            .join(ProfessorCourse, ProfessorCourse.professor_id == User.id)
-            .where(ProfessorCourse.course_id == course_id)
+        # Obtener el curso para leer su professor_id
+        course = await self._course_repo.obtener_por_id(course_id)
+        if course is None or course.professor_id is None:
+            raise HTTPException(
+                status_code=404,
+                detail="El curso no tiene profesor asignado",
+            )
+
+        # JOIN con users para obtener los datos del profesor
+        result = await self._session.execute(
+            select(User).where(User.id == course.professor_id)
         )
-        result = await self._session.execute(stmt)
         professor = result.scalar_one_or_none()
         if professor is None:
             raise HTTPException(
@@ -140,13 +139,13 @@ class ProfessorCourseService:
         """
         Retorna la lista de cursos asignados a un profesor.
 
-        Requisitos: 4.6
+        Requisitos: 5.3, 5.4
         """
         courses = await self._course_repo.listar_por_docente(professor_id)
         return [CourseRead.model_validate(c) for c in courses]
 
     # ------------------------------------------------------------------
-    # 10.2 — Control de acceso RB-04
+    # Control de acceso RB-04
     # ------------------------------------------------------------------
 
     async def verify_professor_assigned_to_course(
@@ -156,16 +155,10 @@ class ProfessorCourseService:
         Verifica que el profesor está asignado al curso.
         Lanza HTTPException(403) si no lo está.
 
-        Requisitos: 5.1, 5.2, 5.3, 5.4
+        Requisitos: 6.1, 6.2, 6.3
         """
-        result = await self._session.execute(
-            select(ProfessorCourse).where(
-                ProfessorCourse.course_id == course_id,
-                ProfessorCourse.professor_id == professor_id,
-            )
-        )
-        assignment = result.scalar_one_or_none()
-        if assignment is None:
+        course = await self._course_repo.obtener_por_id(course_id)
+        if course is None or course.professor_id != professor_id:
             raise HTTPException(
                 status_code=403,
                 detail="No tiene permiso para operar en este curso",
@@ -178,7 +171,7 @@ class ProfessorCourseService:
         Retorna los estudiantes inscritos en un curso, verificando que el
         profesor solicitante esté asignado al curso (RB-04).
 
-        Requisitos: 5.1, 5.3, 5.4
+        Requisitos: 6.1, 6.2
         """
         # Verificar que el profesor está asignado al curso
         await self.verify_professor_assigned_to_course(professor_id, course_id)
@@ -199,7 +192,7 @@ class ProfessorCourseService:
         asignado al curso (RB-04) y que el estudiante está inscrito.
         Registra la operación en audit_log.
 
-        Requisitos: 5.2, 5.5
+        Requisitos: 6.3, 6.4
         """
         # Verificar que el profesor está asignado al curso
         await self.verify_professor_assigned_to_course(professor_id, course_id)

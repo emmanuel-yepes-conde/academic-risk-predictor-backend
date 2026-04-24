@@ -18,12 +18,11 @@ from hypothesis import given, settings as h_settings, HealthCheck, assume
 from hypothesis import strategies as st
 
 from app.application.schemas.course import CourseRead
-from app.application.schemas.professor_course import ProfessorCourseRead
+from app.application.schemas.professor_course import ProfessorAssignmentRead
 from app.application.schemas.user import UserRead
 from app.application.services.professor_course_service import ProfessorCourseService
 from app.domain.enums import RoleEnum, UserStatusEnum
 from app.infrastructure.models.course import Course
-from app.infrastructure.models.professor_course import ProfessorCourse
 from app.infrastructure.models.user import User
 
 
@@ -73,6 +72,7 @@ def _make_course(course_id: UUID, program_id: UUID, code: str, name: str) -> Cou
         credits=3,
         academic_period="2026-1",
         program_id=program_id,
+        professor_id=None,
         created_at=datetime.now(timezone.utc),
     )
 
@@ -83,14 +83,13 @@ def _build_service_for_roundtrip(
 ):
     """
     Build a ProfessorCourseService with a mocked session that simulates:
-      1. assign_professor: creates a ProfessorCourse record
-      2. get_course_professor: returns the professor User via JOIN
+      1. assign_professor: updates course.professor_id directly
+      2. get_course_professor: returns the professor User via course.professor_id
       3. list_professor_courses: returns the course via CourseRepository
 
-    Returns (service, state_dict) where state_dict tracks the assignment.
+    Returns (service, phase) where phase tracks the current operation.
     """
     session = AsyncMock()
-    state = {"assignment": None}
 
     # --- Mock session.execute for different query patterns ---
 
@@ -101,22 +100,8 @@ def _build_service_for_roundtrip(
         def scalar_one_or_none(self):
             return self._value
 
-    class FakeScalarsResult:
-        def __init__(self, values):
-            self._values = values
-
-        def all(self):
-            return self._values
-
-    class FakeScalarsWrapper:
-        def __init__(self, values):
-            self._values = values
-
-        def scalars(self):
-            return FakeScalarsResult(self._values)
-
     # Phase tracking: which operation is being performed
-    phase = {"current": "assign", "assign_call": 0}
+    phase = {"current": "assign"}
 
     async def mock_execute(stmt):
         compiled_str = ""
@@ -127,46 +112,24 @@ def _build_service_for_roundtrip(
             compiled_str = str(stmt)
 
         if phase["current"] == "assign":
-            # assign_professor issues 2 queries:
-            #   1st: select(User) — professor lookup
-            #   2nd: select(ProfessorCourse) — existing assignment lookup
-            idx = phase["assign_call"] % 2
-            phase["assign_call"] += 1
-
-            if idx == 0:
-                # User lookup
-                return FakeScalarResult(professor)
-            else:
-                # ProfessorCourse lookup — no existing assignment
-                return FakeScalarResult(state["assignment"])
+            # assign_professor issues 1 query:
+            #   select(User) — professor lookup
+            return FakeScalarResult(professor)
 
         elif phase["current"] == "get_professor":
-            # get_course_professor: JOIN User + ProfessorCourse
-            if state["assignment"] is not None:
+            # get_course_professor: select(User).where(User.id == course.professor_id)
+            if course.professor_id is not None:
                 return FakeScalarResult(professor)
             return FakeScalarResult(None)
-
-        elif phase["current"] == "list_courses":
-            # list_professor_courses delegates to CourseRepository.listar_por_docente
-            # which does a JOIN Course + ProfessorCourse
-            if state["assignment"] is not None:
-                return FakeScalarsWrapper([course])
-            return FakeScalarsWrapper([])
 
         return FakeScalarResult(None)
 
     session.execute = AsyncMock(side_effect=mock_execute)
-
-    def mock_add(obj):
-        if isinstance(obj, ProfessorCourse):
-            state["assignment"] = obj
-
-    session.add = MagicMock(side_effect=mock_add)
+    session.add = MagicMock()
     session.flush = AsyncMock()
 
     async def mock_refresh(obj):
-        if isinstance(obj, ProfessorCourse) and obj.id is None:
-            obj.id = uuid4()
+        pass  # Course already has an id
 
     session.refresh = AsyncMock(side_effect=mock_refresh)
 
@@ -180,13 +143,13 @@ def _build_service_for_roundtrip(
 
     # For list_professor_courses, the service delegates to _course_repo.listar_por_docente
     async def mock_listar_por_docente(docente_id):
-        if state["assignment"] is not None and state["assignment"].professor_id == docente_id:
+        if course.professor_id is not None and course.professor_id == docente_id:
             return [course]
         return []
 
     service._course_repo.listar_por_docente = AsyncMock(side_effect=mock_listar_por_docente)
 
-    return service, state, phase
+    return service, phase
 
 
 # ---------------------------------------------------------------------------
@@ -217,7 +180,7 @@ async def test_professor_course_assignment_roundtrip(
     Property 11: Round-trip de asignación profesor-curso.
 
     For any professor P assigned to a course C:
-      1. assign_professor(C, P) succeeds and returns a ProfessorCourseRead
+      1. assign_professor(C, P) succeeds and returns a ProfessorAssignmentRead
          referencing both C and P
       2. get_course_professor(C) returns a UserRead matching P's data
       3. list_professor_courses(P) returns a list containing C
@@ -236,14 +199,14 @@ async def test_professor_course_assignment_roundtrip(
     professor = _make_professor_user(professor_id)
     course = _make_course(course_id, program_id, course_code, course_name)
 
-    service, state, phase = _build_service_for_roundtrip(professor, course)
+    service, phase = _build_service_for_roundtrip(professor, course)
 
     # --- Step 1: Assign professor to course ---
     phase["current"] = "assign"
     assignment_result = await service.assign_professor(course_id, professor_id)
 
-    assert isinstance(assignment_result, ProfessorCourseRead), (
-        f"Expected ProfessorCourseRead, got {type(assignment_result).__name__}"
+    assert isinstance(assignment_result, ProfessorAssignmentRead), (
+        f"Expected ProfessorAssignmentRead, got {type(assignment_result).__name__}"
     )
     assert assignment_result.course_id == course_id, (
         f"Assignment course_id mismatch: expected {course_id}, "

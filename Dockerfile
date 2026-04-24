@@ -1,0 +1,35 @@
+# 1. Usamos una imagen base ligera de Python
+# Slim reduce el tamaño pero mantiene lo necesario para ML
+FROM python:3.12-slim
+
+# 2. Evitamos que Python genere archivos .pyc y habilitamos logs en tiempo real
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# 3. Directorio de trabajo en el contenedor
+WORKDIR /code
+
+# 4. Instalamos dependencias del sistema (necesarias para algunas libs de ML)
+# build-essential y libgomp1 son comunes para scikit-learn/numpy
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# 5. Copiamos los requirements e instalamos
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade -r requirements.txt
+
+# 6. Copiamos TODA la estructura del proyecto (app/, ml_models/, etc.)
+COPY . .
+
+# 6.1. Creamos las carpetas necesarias para guardar modelos y logs
+RUN mkdir -p /code/ml_models /code/logs
+
+# 7. Exponemos el puerto que usa Azure por defecto (generalmente 80 o 8000)
+# Azure App Service busca el puerto 8000 o 80 automáticamente.
+EXPOSE 8000
+
+# 8. Comando de arranque: ejecuta migraciones y luego inicia el servidor.
+# El bucle reintenta si la BD aún no está lista (cold start de PostgreSQL).
+CMD ["sh", "-c", "until alembic upgrade head; do echo 'DB no lista, reintentando en 5s...'; sleep 5; done && uvicorn app.main:app --host 0.0.0.0 --port 8000"]

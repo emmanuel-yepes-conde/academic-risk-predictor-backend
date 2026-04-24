@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 
 class ProgramCreate(BaseModel):
+    """Schema de entrada para POST /programs."""
     campus_id: UUID
     institution: str = Field(..., description="Nombre de la institución")
     degree_type: str = Field(default="PREG", description="Tipo de grado, ej: PREG, POST")
@@ -18,16 +19,22 @@ class ProgramCreate(BaseModel):
     snies_code: int = Field(..., description="Código SNIES único del programa")
 
 
+class ProgramUpdate(BaseModel):
+    """Schema de entrada para PATCH /programs/{program_id}. Todos los campos opcionales."""
+    institution: str | None = None
+    degree_type: str | None = None
+    program_code: str | None = None
+    program_name: str | None = None
+    location: str | None = None
+    snies_code: int | None = None
+
+
 class ProgramRead(BaseModel):
     id: UUID
-    university_id: UUID
-    campus_id: UUID
     institution: str
     degree_type: str
     program_code: str
     program_name: str
-    pensum: str
-    academic_group: str
     location: str
     snies_code: int
     created_at: datetime
