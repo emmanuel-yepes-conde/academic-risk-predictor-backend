@@ -17,10 +17,6 @@ param location string = resourceGroup().location
 @description('Contraseña del administrador de PostgreSQL')
 param dbAdminPassword string
 
-@secure()
-@description('Clave secreta para firmar tokens JWT')
-param jwtSecretKey string
-
 @description('Nombre de la base de datos')
 param dbName string = 'mpra_db'
 
@@ -33,14 +29,9 @@ param dbAdminUser string = 'mpraadmin'
 
 var acrName = 'acrmpra${environmentName}'
 var containerAppEnvName = 'cae-mpra-${environmentName}'
-var containerAppName = 'ca-mpra-${environmentName}'
 var postgresServerName = 'pg-mpra-${environmentName}'
 var logAnalyticsName = 'log-mpra-${environmentName}'
 
-var databaseUrl = 'postgresql+asyncpg://${dbAdminUser}:${dbAdminPassword}@${postgresServer.properties.fullyQualifiedDomainName}:5432/${dbName}?sslmode=require'
-
-// AcrPull built-in role definition ID
-var acrPullRoleDefinitionId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')
 
 // ---------------------------------------------------------------------------
 // Azure Container Registry
@@ -149,131 +140,12 @@ resource postgresFirewallRule 'Microsoft.DBforPostgreSQL/flexibleServers/firewal
 }
 
 // ---------------------------------------------------------------------------
-// Container App
-// ---------------------------------------------------------------------------
-
-resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
-  name: containerAppName
-  location: location
-  identity: {
-    type: 'SystemAssigned'
-  }
-  properties: {
-    managedEnvironmentId: containerAppEnv.id
-    configuration: {
-      ingress: {
-        external: true
-        targetPort: 8000
-        transport: 'auto'
-        allowInsecure: false
-      }
-      registries: [
-        {
-          server: acr.properties.loginServer
-          identity: 'system'
-        }
-      ]
-      secrets: [
-        {
-          name: 'database-url'
-          value: databaseUrl
-        }
-        {
-          name: 'jwt-secret-key'
-          value: jwtSecretKey
-        }
-      ]
-    }
-    template: {
-      containers: [
-        {
-          name: 'mpra-backend'
-          image: 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
-          resources: {
-            cpu: json('0.5')
-            memory: '1Gi'
-          }
-          env: [
-            {
-              name: 'DATABASE_URL'
-              secretRef: 'database-url'
-            }
-            {
-              name: 'JWT_SECRET_KEY'
-              secretRef: 'jwt-secret-key'
-            }
-            {
-              name: 'HOST'
-              value: '0.0.0.0'
-            }
-            {
-              name: 'PORT'
-              value: '8000'
-            }
-            {
-              name: 'LOG_LEVEL'
-              value: 'info'
-            }
-            {
-              name: 'CORS_ORIGINS'
-              value: '*'
-            }
-            {
-              name: 'MODEL_PATH'
-              value: 'ml_models/modelo_logistico.joblib'
-            }
-            {
-              name: 'SCALER_PATH'
-              value: 'ml_models/scaler.joblib'
-            }
-            {
-              name: 'DATASET_PATH'
-              value: 'datasets/dataset_estudiantes_decimal.csv'
-            }
-          ]
-          probes: [
-            {
-              type: 'Liveness'
-              httpGet: {
-                path: '/health'
-                port: 8000
-              }
-              initialDelaySeconds: 15
-              periodSeconds: 30
-              failureThreshold: 3
-            }
-          ]
-        }
-      ]
-      scale: {
-        minReplicas: 0
-        maxReplicas: 1
-      }
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Role Assignment — AcrPull para la identidad del Container App sobre el ACR
-// ---------------------------------------------------------------------------
-
-resource acrPullRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(acr.id, containerApp.id, acrPullRoleDefinitionId)
-  scope: acr
-  properties: {
-    principalId: containerApp.identity.principalId
-    principalType: 'ServicePrincipal'
-    roleDefinitionId: acrPullRoleDefinitionId
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Outputs
+// El Container App se crea y configura desde deploy.sh para evitar timeouts
+// de aprovisionamiento en el ARM deployment.
 // ---------------------------------------------------------------------------
 
-output containerAppFqdn string = containerApp.properties.configuration.ingress.fqdn
 output acrLoginServer string = acr.properties.loginServer
 output acrName string = acr.name
 output postgresHost string = postgresServer.properties.fullyQualifiedDomainName
-output containerAppName string = containerApp.name
 output containerAppEnvironmentName string = containerAppEnv.name
