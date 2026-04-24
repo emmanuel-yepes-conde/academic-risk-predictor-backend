@@ -20,6 +20,8 @@ Sistema de predicción de riesgo académico basado en Machine Learning para la d
 
 El **MPRA** utiliza un modelo de **Regresión Logística** (scikit-learn) para transformar variables académicas en una probabilidad de riesgo (0–1), permitiendo intervenciones pedagógicas tempranas.
 
+El modelo de datos sigue una relación simplificada **Programa → Curso**, donde cada programa académico contiene sus cursos directamente, sin jerarquías intermedias de universidad o campus.
+
 **Stack:**
 - Python 3.12 + FastAPI (async) + uvicorn
 - PostgreSQL 16 (persistencia relacional)
@@ -73,23 +75,34 @@ academic-risk-predictor-backend/
 │   ├── main.py                          # Entry point FastAPI
 │   ├── api/v1/endpoints/
 │   │   ├── health.py                    # GET /health
+│   │   ├── auth.py                      # POST /api/v1/login, /register, /refresh
 │   │   ├── prediction.py                # POST /api/v1/predict, /chat
-│   │   └── users.py                     # CRUD /api/v1/users
+│   │   ├── users.py                     # CRUD /api/v1/users
+│   │   ├── programs.py                  # CRUD /api/v1/programs, GET by ID
+│   │   ├── courses.py                   # Asignación profesor-curso, estudiantes
+│   │   └── enrollments.py               # CRUD /api/v1/enrollments
 │   ├── application/
 │   │   ├── schemas/                     # DTOs Pydantic
 │   │   │   ├── user.py
 │   │   │   ├── consent.py
 │   │   │   ├── course.py
+│   │   │   ├── enrollment.py
+│   │   │   ├── program.py
+│   │   │   ├── professor_course.py
 │   │   │   └── audit_log.py
 │   │   └── services/                    # Lógica de negocio
 │   │       ├── user_service.py
+│   │       ├── auth_service.py
 │   │       ├── consent_service.py
+│   │       ├── enrollment_service.py
+│   │       ├── professor_course_service.py
+│   │       ├── token_service.py
 │   │       └── ml_service.py
 │   ├── core/
 │   │   ├── config.py                    # Settings (pydantic-settings)
 │   │   └── security.py
 │   ├── domain/
-│   │   ├── enums.py                     # RoleEnum, UserStatusEnum, OperationEnum
+│   │   ├── enums.py                     # RoleEnum, UserStatusEnum, OperationEnum, EnrollmentStatusEnum
 │   │   └── interfaces/                  # Contratos de repositorios
 │   ├── infrastructure/
 │   │   ├── database.py                  # Engine async + get_session
@@ -100,7 +113,16 @@ academic-risk-predictor-backend/
 ├── alembic/                             # Migraciones de base de datos
 │   └── versions/
 │       ├── 0001_initial_schema.py
-│       └── 0002_add_user_status.py
+│       ├── 0002_add_user_status.py
+│       ├── 0003_add_programs_and_student_profiles.py
+│       ├── 0004_add_university_and_multi_university_support.py
+│       ├── 0005_add_campus_hierarchy.py
+│       ├── 0006_simplify_program_course_model.py
+│       ├── 0007_simplify_professor_course_model.py
+│       ├── 0008_add_course_status.py
+│       ├── 0009_drop_pensum_and_academic_group_from_programs.py
+│       ├── 0010_add_enrollment_status.py
+│       └── 0011_add_pending_completed_enrollment_status.py
 ├── datasets/                            # Dataset de entrenamiento (.csv)
 ├── ml_models/                           # Artefactos ML (.joblib, generados)
 ├── tests/
@@ -183,19 +205,53 @@ alembic revision --autogenerate -m "descripcion_del_cambio"
 alembic history
 ```
 
+### Modelo de Datos
+
+El sistema utiliza un modelo de datos simplificado con la relación directa **Programa → Curso**. Cada programa académico contiene cursos, y los perfiles de estudiantes se vinculan opcionalmente a un programa.
+
 ### Diagrama ER
 
 ```mermaid
 erDiagram
     users {
         uuid id PK
-        string email
+        string email UK
+        string institutional_email UK
         string full_name
         string role
         string status
         bool ml_consent
         string microsoft_oid
         string google_oid
+        datetime created_at
+        datetime updated_at
+    }
+    programs {
+        uuid id PK
+        string institution
+        string degree_type
+        string program_code UK
+        string program_name
+        string location
+        int snies_code UK
+        datetime created_at
+    }
+    courses {
+        uuid id PK
+        string code UK
+        string name
+        int credits
+        string academic_period
+        uuid program_id FK
+        datetime created_at
+    }
+    student_profiles {
+        uuid id PK
+        uuid user_id FK
+        uuid program_id FK "nullable"
+        string student_institutional_id UK
+        string document_type
+        string document_number
         datetime created_at
         datetime updated_at
     }
@@ -206,15 +262,13 @@ erDiagram
         string terms_version
         datetime accepted_at
     }
-    courses {
-        uuid id PK
-        string name
-        string code
-    }
     enrollments {
         uuid id PK
         uuid student_id FK
         uuid course_id FK
+        string status "PENDING | ACTIVE | COMPLETED | CANCELLED"
+        datetime enrollment_date
+        datetime updated_at
     }
     professor_courses {
         uuid id PK
@@ -229,6 +283,9 @@ erDiagram
         jsonb payload
         datetime created_at
     }
+    programs ||--o{ courses : "tiene"
+    programs ||--o{ student_profiles : "pertenece a"
+    users ||--o{ student_profiles : "tiene"
     users ||--o{ consents : "tiene"
     users ||--o{ enrollments : "inscrito en"
     users ||--o{ professor_courses : "dicta"
@@ -364,6 +421,188 @@ Respuesta paginada:
 
 ---
 
+### Programas
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/api/v1/programs/{program_id}` | Obtener un programa académico por ID |
+| GET | `/api/v1/programs/{program_id}/courses` | Listar cursos de un programa (404 si no existe) |
+
+#### `GET /api/v1/programs/{program_id}`
+
+Retorna los datos de un programa académico por su ID. Accesible para cualquier usuario autenticado (STUDENT, PROFESSOR, ADMIN).
+
+Respuesta `200`:
+```json
+{
+  "id": "uuid",
+  "institution": "Universidad Ejemplo",
+  "degree_type": "Pregrado",
+  "program_code": "ING-SIS",
+  "program_name": "Ingeniería de Sistemas",
+  "location": "Bogotá",
+  "snies_code": 12345,
+  "created_at": "2025-01-01T00:00:00Z"
+}
+```
+
+Errores:
+- `404` — Programa no encontrado
+
+#### `GET /api/v1/programs/{program_id}/courses`
+
+Retorna los cursos pertenecientes al programa indicado. Retorna 404 con `"Programa no encontrado"` si el programa no existe.
+
+Respuesta `200`:
+```json
+[
+  {
+    "id": "uuid",
+    "code": "MAT101",
+    "name": "Cálculo I",
+    "credits": 4,
+    "academic_period": "2025-1",
+    "program_id": "uuid",
+    "created_at": "2025-01-01T00:00:00Z"
+  }
+]
+```
+
+---
+
+### Cursos y Asignación Profesor-Curso
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| POST | `/api/v1/courses/{course_id}/professor` | Asignar o reemplazar profesor de un curso |
+| GET | `/api/v1/courses/{course_id}/professor` | Obtener profesor asignado a un curso |
+| GET | `/api/v1/professors/{professor_id}/courses` | Listar cursos asignados a un profesor |
+| GET | `/api/v1/courses/{course_id}/students` | Listar estudiantes inscritos en un curso (RB-04) |
+
+#### `POST /api/v1/courses/{course_id}/professor`
+
+Asigna un profesor al curso indicado. Si el curso ya tiene un profesor asignado, lo reemplaza. El usuario debe tener rol `PROFESSOR`.
+
+Request body:
+```json
+{
+  "professor_id": "uuid"
+}
+```
+
+#### `GET /api/v1/courses/{course_id}/students`
+
+Retorna los estudiantes inscritos en el curso indicado. El profesor solicitante debe estar asignado al curso (RB-04). Retorna 403 si el profesor no está asignado.
+
+Query param: `professor_id` (obligatorio) — ID del profesor que solicita el acceso.
+
+---
+
+### Inscripciones (Enrollments)
+
+| Método | Ruta | Rol requerido | Status | Descripción |
+|--------|------|---------------|--------|-------------|
+| POST | `/api/v1/enrollments` | ADMIN | 201 | Inscribir estudiante en curso |
+| PATCH | `/api/v1/enrollments/{enrollment_id}` | ADMIN | 200 | Cambiar curso de inscripción |
+| PATCH | `/api/v1/enrollments/{enrollment_id}/status` | ADMIN | 200 | Actualizar estado de inscripción |
+| GET | `/api/v1/enrollments/{enrollment_id}` | ADMIN | 200 | Detalle de inscripción |
+| GET | `/api/v1/students/{student_id}/enrollments` | STUDENT (auto-acceso), ADMIN, PROFESSOR | 200 | Listar inscripciones de un estudiante |
+
+#### `POST /api/v1/enrollments`
+
+Inscribe un estudiante en un curso. Si ya existe una inscripción cancelada para la misma combinación `(student_id, course_id)`, se reactiva en lugar de crear una nueva. Requiere rol ADMIN.
+
+Request body:
+```json
+{
+  "student_id": "uuid",
+  "course_id": "uuid"
+}
+```
+
+Respuesta `201`:
+```json
+{
+  "id": "uuid",
+  "student_id": "uuid",
+  "course_id": "uuid",
+  "status": "ACTIVE",
+  "enrollment_date": "2025-01-01T00:00:00Z",
+  "updated_at": "2025-01-01T00:00:00Z"
+}
+```
+
+Errores:
+- `422` — El usuario no existe o no tiene rol de estudiante
+- `404` — Curso no encontrado
+- `409` — El estudiante ya está inscrito en este curso
+
+#### `PATCH /api/v1/enrollments/{enrollment_id}`
+
+Actualiza el curso de una inscripción existente. Valida que el curso destino exista, esté activo y que no exista una inscripción activa duplicada. Requiere rol ADMIN.
+
+Request body:
+```json
+{
+  "course_id": "uuid"
+}
+```
+
+Errores:
+- `404` — Inscripción no encontrada / Curso no encontrado
+- `409` — El estudiante ya está inscrito en el curso destino
+
+#### `PATCH /api/v1/enrollments/{enrollment_id}/status`
+
+Actualiza el estado de una inscripción a cualquier estado válido: PENDING, ACTIVE, COMPLETED o CANCELLED. El registro se preserva en la base de datos con el campo `status` actualizado. Requiere rol ADMIN.
+
+Request body:
+```json
+{
+  "status": "COMPLETED"
+}
+```
+
+Valores válidos para `status`: `PENDING`, `ACTIVE`, `COMPLETED`, `CANCELLED`.
+
+Errores:
+- `404` — Inscripción no encontrada
+- `422` — Valor de estado inválido
+
+#### `GET /api/v1/enrollments/{enrollment_id}`
+
+Retorna los datos completos de una inscripción específica. Requiere rol ADMIN.
+
+Errores:
+- `404` — Inscripción no encontrada
+
+#### `GET /api/v1/students/{student_id}/enrollments`
+
+Retorna la lista de inscripciones de un estudiante. Soporta auto-acceso para estudiantes: si el JWT tiene rol STUDENT y el `sub` coincide con el `student_id` del path, se permite el acceso y se retornan inscripciones en todos los estados (para la vista "Mi Progreso"). Si el usuario es PROFESSOR, solo retorna inscripciones en cursos asignados al profesor (RB-04). Si el usuario es ADMIN, retorna inscripciones activas por defecto. Requiere rol STUDENT (auto-acceso), ADMIN o PROFESSOR.
+
+Query params:
+- `status` (opcional): Filtrar por estado de inscripción. Valores válidos: `PENDING`, `ACTIVE`, `COMPLETED`, `CANCELLED`. Si no se proporciona, el comportamiento depende del rol (STUDENT: todos los estados, ADMIN: solo ACTIVE, PROFESSOR: filtrado por cursos del profesor).
+
+Respuesta `200`:
+```json
+[
+  {
+    "id": "uuid",
+    "student_id": "uuid",
+    "course_id": "uuid",
+    "status": "ACTIVE",
+    "enrollment_date": "2025-01-01T00:00:00Z",
+    "updated_at": "2025-01-01T00:00:00Z"
+  }
+]
+```
+
+Errores:
+- `403` — STUDENT intentando acceder a inscripciones de otro estudiante
+- `422` — Valor de `status` inválido
+
+---
+
 ## Modelo ML
 
 - Artefactos en `ml_models/` (`.joblib`)
@@ -382,13 +621,32 @@ task test
 
 ---
 
+## Mejoras Pendientes
+
+### Seguridad
+- Rate limiting por IP/usuario en endpoints críticos
+- Validación de inputs más estricta (longitud máxima, caracteres permitidos)
+
+### Observabilidad
+- Logging estructurado (JSON) con correlación de requests
+- Métricas de rendimiento (latencia p95, throughput)
+- Health checks más detallados por subsistema
+
+---
+
 ## Despliegue
 
-Soportado en Railway, Render y Heroku. Ver `Procfile`, `railway.json`, `render.yaml`.
+### Despliegue en Azure con CI/CD (GitHub Actions)
 
-```bash
-# Procfile
-web: uvicorn app.main:app --host 0.0.0.0 --port $PORT
-```
+El proyecto cuenta con pipelines de **Integración Continua (CI)** y **Despliegue Continuo (CD)** automatizados mediante GitHub Actions. Se utilizan dos workflows separados:
 
-Asegúrate de configurar las variables de entorno en el panel del servicio, especialmente `DATABASE_URL`.
+| Workflow | Archivo | Propósito |
+|----------|---------|-----------|
+| **CI** | `.github/workflows/ci.yml` | Ejecuta tests, cobertura de código y validación de la plantilla Bicep en cada Pull Request contra `main` o `develop` |
+| **CD** | `.github/workflows/cd.yml` | Despliega automáticamente a Azure Container Apps al fusionar código a `develop` (entorno dev) o `main` (entorno prod) |
+
+**Estrategia de ramas:**
+- Merge a `develop` → despliegue automático a **dev**
+- Merge a `main` → despliegue automático a **prod** (con ejecución de tests previos)
+
+> 📖 Para documentación detallada sobre CI/CD, configuración de GitHub Secrets, creación del Service Principal de Azure y ejecución manual de workflows, consulta [`infra/README.md`](infra/README.md).

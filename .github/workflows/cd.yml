@@ -1,0 +1,171 @@
+name: CD
+
+on:
+  push:
+    branches: [develop, main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Entorno de despliegue"
+        required: true
+        type: choice
+        options:
+          - dev
+          - prod
+
+# ==============================================================================
+# Deploy a DEV
+# Se ejecuta cuando hay push a `develop` o se dispara manualmente con env=dev
+# ==============================================================================
+jobs:
+  deploy-dev:
+    name: Deploy → Dev
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/develop') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dev')
+    runs-on: ubuntu-latest
+    environment: development
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Desplegar en Dev
+        run: |
+          bash infra/deploy.sh \
+            -e dev \
+            -r ${{ vars.AZURE_REGION }} \
+            -p "${{ secrets.DB_PASSWORD }}" \
+            -j "${{ secrets.JWT_SECRET }}"
+
+      - name: Health check (Dev)
+        run: |
+          FQDN=$(az containerapp show \
+            --name "ca-mpra-dev" \
+            --resource-group "rg-mpra-dev" \
+            --query 'properties.configuration.ingress.fqdn' -o tsv)
+
+          echo "Verificando https://${FQDN}/health"
+          for i in $(seq 1 20); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://${FQDN}/health" || true)
+            if [ "$STATUS" = "200" ]; then
+              echo "✅ Health check exitoso (intento $i)"
+              echo "### ✅ Deploy Dev completado" >> $GITHUB_STEP_SUMMARY
+              echo "- **URL:** https://${FQDN}" >> $GITHUB_STEP_SUMMARY
+              echo "- **Health:** https://${FQDN}/health" >> $GITHUB_STEP_SUMMARY
+              exit 0
+            fi
+            echo "⏳ Intento $i/20 — HTTP $STATUS, esperando 20s..."
+            sleep 20
+          done
+          echo "❌ Health check falló después de 20 intentos"
+          exit 1
+
+# ==============================================================================
+# Deploy a PROD
+# Se ejecuta cuando hay push a `main` o se dispara manualmente con env=prod
+# Requiere que los tests pasen antes de desplegar
+# ==============================================================================
+  deploy-prod:
+    name: Deploy → Prod
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod')
+    runs-on: ubuntu-latest
+    environment: production
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: mpra_test
+          POSTGRES_PASSWORD: mpra_test_pass
+          POSTGRES_DB: mpra_test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U mpra_test"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Esperar PostgreSQL
+        run: |
+          until pg_isready -h localhost -p 5432 -U mpra_test; do
+            echo "Esperando a PostgreSQL..."
+            sleep 2
+          done
+
+      - name: Ejecutar migraciones y tests
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: mpra_test
+          DB_PASSWORD: mpra_test_pass
+          DB_NAME: mpra_test_db
+          JWT_SECRET_KEY: test-jwt-secret-key-for-ci
+          DATABASE_URL: postgresql+asyncpg://mpra_test:mpra_test_pass@localhost:5432/mpra_test_db
+        run: |
+          alembic upgrade head
+          python3 -m pytest tests/ -v --cov=app
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Desplegar en Prod
+        run: |
+          bash infra/deploy.sh \
+            -e prod \
+            -r ${{ vars.AZURE_REGION }} \
+            -p "${{ secrets.DB_PASSWORD }}" \
+            -j "${{ secrets.JWT_SECRET }}"
+
+      - name: Health check (Prod)
+        run: |
+          FQDN=$(az containerapp show \
+            --name "ca-mpra-prod" \
+            --resource-group "rg-mpra-prod" \
+            --query 'properties.configuration.ingress.fqdn' -o tsv)
+
+          echo "Verificando https://${FQDN}/health"
+          for i in $(seq 1 20); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://${FQDN}/health" || true)
+            if [ "$STATUS" = "200" ]; then
+              echo "✅ Health check exitoso (intento $i)"
+              echo "### ✅ Deploy Prod completado" >> $GITHUB_STEP_SUMMARY
+              echo "- **URL:** https://${FQDN}" >> $GITHUB_STEP_SUMMARY
+              echo "- **Health:** https://${FQDN}/health" >> $GITHUB_STEP_SUMMARY
+              exit 0
+            fi
+            echo "⏳ Intento $i/20 — HTTP $STATUS, esperando 20s..."
+            sleep 20
+          done
+          echo "❌ Health check falló después de 20 intentos"
+          exit 1

@@ -46,7 +46,7 @@
 ## Infraestructura y Despliegue
 - Modelo cliente-servidor desacoplado (escalabilidad horizontal del backend)
 - Auditoría: logs de cada transacción de escritura en BD (trazabilidad de notas y asistencias)
-- Despliegue soportado: Docker, Railway, Render, Heroku (ver `Procfile`, `railway.json`, `render.yaml`)
+- Despliegue: Docker + Azure Container Apps vía GitHub Actions CI/CD (ver `.github/workflows/` e `infra/`)
 
 ## Comandos Comunes
 

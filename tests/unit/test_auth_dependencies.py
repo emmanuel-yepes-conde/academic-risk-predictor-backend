@@ -355,3 +355,114 @@ class TestRequireRoles:
             await guard(current_user=prof_user)
 
         assert exc_info.value.status_code == 403
+
+
+# ===================================================================
+# require_student_self_or_roles dependency (Requirements 1.1–1.4, 1.6)
+# ===================================================================
+
+from unittest.mock import AsyncMock, MagicMock
+
+from app.api.v1.dependencies.auth import require_student_self_or_roles
+
+_STUDENT_ID = uuid.UUID("b2c3d4e5-f6a7-8901-bcde-f12345678901")
+_PROFESSOR_ID = uuid.UUID("c3d4e5f6-a7b8-9012-cdef-123456789012")
+
+
+class TestRequireStudentSelfOrRolesStudentAccess:
+    """Verify STUDENT self-access and cross-student denial."""
+
+    @pytest.mark.anyio
+    async def test_student_self_access_allowed(self):
+        """STUDENT accessing their own data (student_id == current_user.id) must be allowed."""
+        student_user = CurrentUser(id=_STUDENT_ID, role=RoleEnum.STUDENT)
+        mock_session = AsyncMock()
+
+        result = await require_student_self_or_roles(
+            student_id=_STUDENT_ID,
+            current_user=student_user,
+            session=mock_session,
+        )
+
+        assert result is student_user
+
+    @pytest.mark.anyio
+    async def test_student_accessing_another_student_returns_403(self):
+        """STUDENT accessing another student's data must get 403."""
+        other_student_id = uuid.uuid4()
+        student_user = CurrentUser(id=_STUDENT_ID, role=RoleEnum.STUDENT)
+        mock_session = AsyncMock()
+
+        with pytest.raises(HTTPException) as exc_info:
+            await require_student_self_or_roles(
+                student_id=other_student_id,
+                current_user=student_user,
+                session=mock_session,
+            )
+
+        assert exc_info.value.status_code == 403
+        assert exc_info.value.detail == "No tiene permisos para esta acción"
+
+
+class TestRequireStudentSelfOrRolesAdminAccess:
+    """Verify ADMIN always has access."""
+
+    @pytest.mark.anyio
+    async def test_admin_access_allowed_for_any_student_id(self):
+        """ADMIN must be allowed to access any student's data."""
+        admin_user = CurrentUser(id=uuid.uuid4(), role=RoleEnum.ADMIN)
+        mock_session = AsyncMock()
+
+        result = await require_student_self_or_roles(
+            student_id=_STUDENT_ID,
+            current_user=admin_user,
+            session=mock_session,
+        )
+
+        assert result is admin_user
+
+
+class TestRequireStudentSelfOrRolesProfessorAccess:
+    """Verify PROFESSOR access follows RB-04 (student enrolled in professor's course)."""
+
+    @pytest.mark.anyio
+    async def test_professor_allowed_when_student_enrolled_in_course(self):
+        """PROFESSOR must be allowed when the student is enrolled in one of their courses."""
+        professor_user = CurrentUser(id=_PROFESSOR_ID, role=RoleEnum.PROFESSOR)
+
+        # Mock session.execute to return a non-None scalar (enrollment exists)
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = uuid.uuid4()  # enrollment id
+        mock_session = AsyncMock()
+        mock_session.execute.return_value = mock_result
+
+        result = await require_student_self_or_roles(
+            student_id=_STUDENT_ID,
+            current_user=professor_user,
+            session=mock_session,
+        )
+
+        assert result is professor_user
+        mock_session.execute.assert_awaited_once()
+
+    @pytest.mark.anyio
+    async def test_professor_denied_when_student_not_in_courses(self):
+        """PROFESSOR must be denied when the student is not enrolled in any of their courses."""
+        professor_user = CurrentUser(id=_PROFESSOR_ID, role=RoleEnum.PROFESSOR)
+
+        # Mock session.execute to return None (no enrollment found)
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        mock_session = AsyncMock()
+        mock_session.execute.return_value = mock_result
+
+        with pytest.raises(HTTPException) as exc_info:
+            await require_student_self_or_roles(
+                student_id=_STUDENT_ID,
+                current_user=professor_user,
+                session=mock_session,
+            )
+
+        assert exc_info.value.status_code == 403
+        assert exc_info.value.detail == "No tiene permisos para esta acción"
+        mock_session.execute.assert_awaited_once()

@@ -3,11 +3,24 @@ AuditLog repository — insert-only (Req 6.3, 9.4).
 UPDATE and DELETE are explicitly forbidden at the repository level.
 """
 
+from typing import Any
+from uuid import UUID
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.schemas.audit_log import AuditLogCreate
 from app.domain.interfaces.audit_log_repository import IAuditLogRepository
 from app.infrastructure.models.audit_log import AuditLog
+
+
+def _make_json_safe(data: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Convert non-JSON-serializable values (UUID, enum, etc.) to strings."""
+    if data is None:
+        return None
+    return {
+        k: str(v) if isinstance(v, UUID) else v
+        for k, v in data.items()
+    }
 
 
 class AuditLogRepository(IAuditLogRepository):
@@ -21,8 +34,8 @@ class AuditLogRepository(IAuditLogRepository):
             operation=log.operation,
             record_id=log.record_id,
             user_id=log.user_id,
-            previous_data=log.previous_data,
-            new_data=log.new_data,
+            previous_data=_make_json_safe(log.previous_data),
+            new_data=_make_json_safe(log.new_data),
         )
         self._session.add(entry)
         await self._session.flush()

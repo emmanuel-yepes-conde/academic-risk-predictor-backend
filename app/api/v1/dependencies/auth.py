@@ -5,10 +5,12 @@ Provides:
 - ``CurrentUser``: Pydantic model representing the authenticated user.
 - ``get_current_user``: Extracts and validates the JWT from the Authorization header.
 - ``require_roles``: Factory that returns a dependency enforcing role-based access.
+- ``require_student_self_or_roles``: Dependency allowing STUDENT self-access
+  by ``student_id``, ADMIN full access, or PROFESSOR with RB-04 visibility.
 - ``require_self_or_roles``: Dependency allowing access to own data, ADMIN, or
   PROFESSOR with RB-04 visibility.
 
-Requirements: 3.1–3.6, 5.1–5.6, 6.5, 8.2
+Requirements: 1.1–1.6, 3.1–3.6, 5.1–5.6, 6.5, 8.2
 """
 
 from typing import Callable, List
@@ -24,8 +26,8 @@ from app.core.config import settings
 from app.domain.enums import RoleEnum
 from app.domain.exceptions import InvalidTokenError, TokenExpiredError
 from app.infrastructure.database import get_session
+from app.infrastructure.models.course import Course
 from app.infrastructure.models.enrollment import Enrollment
-from app.infrastructure.models.professor_course import ProfessorCourse
 
 
 # ---------------------------------------------------------------------------
@@ -127,6 +129,63 @@ def require_roles(*roles: RoleEnum) -> Callable:
 # require_self_or_roles dependency
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# require_student_self_or_roles dependency
+# ---------------------------------------------------------------------------
+
+async def require_student_self_or_roles(
+    student_id: UUID = Path(...),
+    current_user: CurrentUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> CurrentUser:
+    """Allow access when a STUDENT is accessing their own data, user is ADMIN,
+    or is a PROFESSOR whose courses include the target student (RB-04).
+
+    This dependency reads ``student_id`` from the path parameter automatically.
+
+    Raises:
+        HTTPException 403: When none of the access conditions are met.
+    """
+    # STUDENT: self-access only
+    if current_user.role == RoleEnum.STUDENT:
+        if current_user.id == student_id:
+            return current_user
+        raise HTTPException(
+            status_code=403, detail="No tiene permisos para esta acción"
+        )
+
+    # ADMIN: full access
+    if current_user.role == RoleEnum.ADMIN:
+        return current_user
+
+    # PROFESSOR: allowed only if the target student is enrolled in one of
+    # the professor's assigned courses (RB-04).
+    if current_user.role == RoleEnum.PROFESSOR:
+        stmt = (
+            select(Enrollment.id)
+            .join(
+                Course,
+                Course.id == Enrollment.course_id,
+            )
+            .where(
+                Course.professor_id == current_user.id,
+                Enrollment.student_id == student_id,
+            )
+            .limit(1)
+        )
+        result = await session.execute(stmt)
+        if result.scalar_one_or_none() is not None:
+            return current_user
+
+    raise HTTPException(
+        status_code=403, detail="No tiene permisos para esta acción"
+    )
+
+
+# ---------------------------------------------------------------------------
+# require_self_or_roles dependency
+# ---------------------------------------------------------------------------
+
 async def require_self_or_roles(
     user_id: UUID = Path(...),
     current_user: CurrentUser = Depends(get_current_user),
@@ -154,11 +213,11 @@ async def require_self_or_roles(
         stmt = (
             select(Enrollment.id)
             .join(
-                ProfessorCourse,
-                ProfessorCourse.course_id == Enrollment.course_id,
+                Course,
+                Course.id == Enrollment.course_id,
             )
             .where(
-                ProfessorCourse.professor_id == current_user.id,
+                Course.professor_id == current_user.id,
                 Enrollment.student_id == user_id,
             )
             .limit(1)
