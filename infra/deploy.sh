@@ -271,7 +271,9 @@ deploy() {
     # -----------------------------------------------------------------------
     log_info "Paso 4/6: Configurando Container App '${ca_name}'..."
 
-    local database_url="postgresql+asyncpg://mpraadmin:${DB_PASSWORD}@${postgres_host}:5432/mpra_db?ssl=require"
+    local db_password_encoded
+    db_password_encoded=$(printf '%s' "${DB_PASSWORD}" | python3 -c "import sys,urllib.parse; print(urllib.parse.quote(sys.stdin.read(), safe=''))")
+    local database_url="postgresql+asyncpg://mpraadmin:${db_password_encoded}@${postgres_host}:5432/mpra_db?ssl=require"
 
     if az containerapp show --name "${ca_name}" --resource-group "${rg_name}" --output none 2>/dev/null; then
         log_info "Container App '${ca_name}' ya existe, actualizando secrets y env vars..."

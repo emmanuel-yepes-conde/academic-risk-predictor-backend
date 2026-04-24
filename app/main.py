@@ -31,12 +31,9 @@ async def lifespan(app: FastAPI):
     """
     # Startup
     print("\n" + "="*80)
-    print("🚀 INICIANDO SISTEMA DE PREDICCIÓN DE RIESGO ACADÉMICO")
+    print("INICIANDO SISTEMA DE PREDICCION DE RIESGO ACADEMICO")
     print("="*80 + "\n")
-    # Inicializar el pool de conexiones a la base de datos
-    async with engine.connect():
-        pass
-    print("✅ SISTEMA INICIADO Y LISTO PARA RECIBIR PETICIONES")
+    print("SISTEMA INICIADO Y LISTO PARA RECIBIR PETICIONES")
     print("="*80 + "\n")
     
     yield
