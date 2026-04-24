@@ -102,10 +102,8 @@ jobs:
       - name: Checkout código
         uses: actions/checkout@v4
 
-      - name: Azure CLI Login
-        uses: azure/login@v2
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - name: Instalar Bicep CLI
+        run: az bicep install
 
-      - name: Validar Bicep
+      - name: Validar Bicep (compilación local, sin login Azure)
         run: az bicep build --file infra/main.bicep

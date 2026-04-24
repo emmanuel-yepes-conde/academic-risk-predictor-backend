@@ -204,7 +204,7 @@ deploy() {
     local rg_name="rg-mpra-${ENV_NAME}"
     local bicep_file="${SCRIPT_DIR}/main.bicep"
 
-    log_info "Iniciando despliegue del entorno '${ENV_NAME}' en región '${REGION}'..."
+    log_info "Iniciando despliegue del entorno '${ENV_NAME}' en región '${REGION}' (5 pasos)..."
     log_info "Resource Group: ${rg_name}"
 
     # Verificar que el archivo Bicep existe
@@ -216,7 +216,7 @@ deploy() {
     # -----------------------------------------------------------------------
     # Paso 1: Crear Resource Group
     # -----------------------------------------------------------------------
-    log_info "Paso 1/6: Creando Resource Group '${rg_name}' en '${REGION}'..."
+    log_info "Paso 1/5: Creando Resource Group '${rg_name}' en '${REGION}'..."
     if ! az group create --name "${rg_name}" --location "${REGION}" --output none; then
         log_error "No se pudo crear el Resource Group '${rg_name}'."
         log_error "Verifica que la región '${REGION}' es válida y que tienes permisos suficientes."
@@ -227,7 +227,7 @@ deploy() {
     # -----------------------------------------------------------------------
     # Paso 2: Desplegar plantilla Bicep
     # -----------------------------------------------------------------------
-    log_info "Paso 2/6: Desplegando plantilla Bicep..."
+    log_info "Paso 2/5: Desplegando plantilla Bicep..."
     local deployment_output
     if ! deployment_output=$(az deployment group create \
         --resource-group "${rg_name}" \
@@ -246,7 +246,7 @@ deploy() {
     # -----------------------------------------------------------------------
     # Paso 3: Capturar outputs del despliegue
     # -----------------------------------------------------------------------
-    log_info "Paso 3/6: Capturando outputs del despliegue..."
+    log_info "Paso 3/5: Capturando outputs del despliegue..."
 
     local acr_name acr_login_server fqdn postgres_host ca_name
 
@@ -280,7 +280,7 @@ deploy() {
     # -----------------------------------------------------------------------
     # Paso 4: Construir imagen Docker en ACR
     # -----------------------------------------------------------------------
-    log_info "Paso 4/6: Construyendo imagen Docker en ACR '${acr_name}'..."
+    log_info "Paso 4/5: Construyendo imagen Docker en ACR '${acr_name}'..."
     if ! az acr build \
         --registry "${acr_name}" \
         --image mpra-backend:latest \
@@ -295,7 +295,7 @@ deploy() {
     # -----------------------------------------------------------------------
     # Paso 5: Actualizar Container App con la imagen nueva
     # -----------------------------------------------------------------------
-    log_info "Paso 5/6: Actualizando Container App '${ca_name}' con la imagen nueva..."
+    log_info "Paso 5/5: Actualizando Container App '${ca_name}' con la imagen nueva..."
     if ! az containerapp update \
         --name "${ca_name}" \
         --resource-group "${rg_name}" \
@@ -306,27 +306,7 @@ deploy() {
         exit 1
     fi
     log_success "Container App '${ca_name}' actualizado con la imagen nueva."
-
-    # -----------------------------------------------------------------------
-    # Paso 6: Ejecutar migraciones Alembic
-    # -----------------------------------------------------------------------
-    log_info "Paso 6/6: Ejecutando migraciones Alembic..."
-    set +e
-    local migration_output
-    migration_output=$(az containerapp exec \
-        --name "${ca_name}" \
-        --resource-group "${rg_name}" \
-        --command "alembic upgrade head" 2>&1)
-    local migration_exit_code=$?
-    set -e
-
-    if [[ ${migration_exit_code} -ne 0 ]]; then
-        log_warn "Las migraciones de Alembic fallaron (exit code: ${migration_exit_code})."
-        log_warn "Detalle: ${migration_output}"
-        log_warn "La aplicación puede no funcionar correctamente hasta que las migraciones se ejecuten manualmente."
-    else
-        log_success "Migraciones de Alembic ejecutadas correctamente."
-    fi
+    log_info "Las migraciones Alembic se ejecutan automáticamente al arrancar el contenedor."
 
     # -----------------------------------------------------------------------
     # Resumen final

@@ -1,6 +1,6 @@
 # 1. Usamos una imagen base ligera de Python
 # Slim reduce el tamaño pero mantiene lo necesario para ML
-FROM python:3.10-slim
+FROM python:3.12-slim
 
 # 2. Evitamos que Python genere archivos .pyc y habilitamos logs en tiempo real
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -30,6 +30,6 @@ RUN mkdir -p /code/ml_models /code/logs
 # Azure App Service busca el puerto 8000 o 80 automáticamente.
 EXPOSE 8000
 
-# 8. Comando de arranque
-# Apuntamos al nuevo entrypoint 'app.main:app'
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# 8. Comando de arranque: ejecuta migraciones y luego inicia el servidor.
+# El bucle reintenta si la BD aún no está lista (cold start de PostgreSQL).
+CMD ["sh", "-c", "until alembic upgrade head; do echo 'DB no lista, reintentando en 5s...'; sleep 5; done && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
