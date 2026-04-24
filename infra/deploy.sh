@@ -280,12 +280,6 @@ deploy() {
             --resource-group "${rg_name}" \
             --secrets "database-url=${database_url}" "jwt-secret-key=${JWT_SECRET}" \
             --output none
-        # Eliminar CORS_ORIGINS si existe (causaba error de parsing en pydantic-settings)
-        az containerapp update \
-            --name "${ca_name}" \
-            --resource-group "${rg_name}" \
-            --remove-env-vars CORS_ORIGINS \
-            --output none 2>/dev/null || true
     else
         log_info "Creando Container App '${ca_name}'..."
         az containerapp create \
