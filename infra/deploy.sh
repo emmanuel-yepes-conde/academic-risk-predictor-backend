@@ -274,12 +274,18 @@ deploy() {
     local database_url="postgresql+asyncpg://mpraadmin:${DB_PASSWORD}@${postgres_host}:5432/mpra_db?sslmode=require"
 
     if az containerapp show --name "${ca_name}" --resource-group "${rg_name}" --output none 2>/dev/null; then
-        log_info "Container App '${ca_name}' ya existe, actualizando secrets..."
+        log_info "Container App '${ca_name}' ya existe, actualizando secrets y env vars..."
         az containerapp secret set \
             --name "${ca_name}" \
             --resource-group "${rg_name}" \
             --secrets "database-url=${database_url}" "jwt-secret-key=${JWT_SECRET}" \
             --output none
+        # Eliminar CORS_ORIGINS si existe (causaba error de parsing en pydantic-settings)
+        az containerapp update \
+            --name "${ca_name}" \
+            --resource-group "${rg_name}" \
+            --remove-env-vars CORS_ORIGINS \
+            --output none 2>/dev/null || true
     else
         log_info "Creando Container App '${ca_name}'..."
         az containerapp create \
@@ -300,7 +306,6 @@ deploy() {
                 "HOST=0.0.0.0" \
                 "PORT=8000" \
                 "LOG_LEVEL=info" \
-                'CORS_ORIGINS=["*"]' \
                 "MODEL_PATH=ml_models/modelo_logistico.joblib" \
                 "SCALER_PATH=ml_models/scaler.joblib" \
                 "DATASET_PATH=datasets/dataset_estudiantes_decimal.csv" \
