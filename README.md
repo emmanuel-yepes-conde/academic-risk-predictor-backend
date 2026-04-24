@@ -621,18 +621,20 @@ task test
 
 ---
 
+## Mejoras Pendientes
+
+### Seguridad
+- Rate limiting por IP/usuario en endpoints críticos
+- Validación de inputs más estricta (longitud máxima, caracteres permitidos)
+
+### Observabilidad
+- Logging estructurado (JSON) con correlación de requests
+- Métricas de rendimiento (latencia p95, throughput)
+- Health checks más detallados por subsistema
+
+---
+
 ## Despliegue
-
-### Plataformas PaaS
-
-Soportado en Railway, Render y Heroku. Ver `Procfile`, `railway.json`, `render.yaml`.
-
-```bash
-# Procfile
-web: uvicorn app.main:app --host 0.0.0.0 --port $PORT
-```
-
-Asegúrate de configurar las variables de entorno en el panel del servicio, especialmente `DATABASE_URL`.
 
 ### Despliegue en Azure con CI/CD (GitHub Actions)
 
