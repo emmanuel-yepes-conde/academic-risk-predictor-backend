@@ -271,7 +271,7 @@ deploy() {
     # -----------------------------------------------------------------------
     log_info "Paso 4/6: Configurando Container App '${ca_name}'..."
 
-    local database_url="postgresql+asyncpg://mpraadmin:${DB_PASSWORD}@${postgres_host}:5432/mpra_db?ssl=True"
+    local database_url="postgresql+asyncpg://mpraadmin:${DB_PASSWORD}@${postgres_host}:5432/mpra_db?ssl=require"
 
     if az containerapp show --name "${ca_name}" --resource-group "${rg_name}" --output none 2>/dev/null; then
         log_info "Container App '${ca_name}' ya existe, actualizando secrets y env vars..."
@@ -391,7 +391,7 @@ deploy() {
     echo -e "  ${BLUE}Health check:${NC}       https://${fqdn}/health"
     echo ""
     echo -e "  ${BLUE}PostgreSQL Host:${NC}    ${postgres_host}"
-    echo -e "  ${BLUE}Cadena de conexión:${NC} postgresql+asyncpg://mpraadmin:****@${postgres_host}:5432/mpra_db?sslmode=require"
+    echo -e "  ${BLUE}Cadena de conexión:${NC} postgresql+asyncpg://mpraadmin:****@${postgres_host}:5432/mpra_db?ssl=require"
     echo ""
     echo -e "  ${BLUE}ACR:${NC}                ${acr_login_server}"
     echo -e "  ${BLUE}Container App:${NC}      ${ca_name}"
