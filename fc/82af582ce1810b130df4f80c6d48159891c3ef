@@ -1,0 +1,45 @@
+alembic/versions/0012_add_last_login_to_users.py
+  b03b3a99345ebca4 1-25
+app/infrastructure/repositories/user_repository.py
+  b03b3a99345ebca4 6,21,36,41,62-68,128,134,136,146,152,184-245
+app/api/v1/endpoints/programs.py
+  b03b3a99345ebca4 73-93
+app/domain/interfaces/user_repository.py
+  b03b3a99345ebca4 43,52,58-63,66-68
+app/api/v1/endpoints/auth.py
+  b03b3a99345ebca4 48
+app/infrastructure/models/user.py
+  b03b3a99345ebca4 41-44
+app/api/v1/endpoints/users.py
+  b03b3a99345ebca4 22,55,68,100-113
+app/application/services/program_service.py
+  b03b3a99345ebca4 71-75
+app/application/schemas/user.py
+  b03b3a99345ebca4 28,43-55
+app/application/schemas/program.py
+  b03b3a99345ebca4 4
+app/application/services/user_service.py
+  b03b3a99345ebca4 32,43-44,85,88-94,99-108
+app/application/services/auth_service.py
+  b03b3a99345ebca4 16,27,37,41,66-74
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "fc82af582ce1810b130df4f80c6d48159891c3ef",
+  "prompts": {
+    "b03b3a99345ebca4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "379dbf03-6b10-4ee4-83b4-56a99a81b41a",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "daforonda_meli",
+      "messages": [],
+      "total_additions": 212,
+      "total_deletions": 13,
+      "accepted_lines": 247,
+      "overriden_lines": 0
+    }
+  }
+}
