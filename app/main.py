@@ -28,7 +28,7 @@ from app.infrastructure.database import engine
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("\n" + "="*80)
-    print("🚀 INICIANDO SISTEMA DE PREDICCIÓN DE RIESGO ACADÉMICO")
+    print("INICIANDO SISTEMA DE PREDICCION DE RIESGO ACADEMICO")
     print("="*80 + "\n")
     async with engine.connect():
         pass
