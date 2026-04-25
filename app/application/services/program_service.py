@@ -68,6 +68,11 @@ class ProgramService:
 
         return ProgramRead.model_validate(program)
 
+    async def list_programs(self, skip: int = 0, limit: int = 100) -> list[ProgramRead]:
+        """Lista todos los programas académicos."""
+        programs = await self._repo.list_all(skip=skip, limit=limit)
+        return [ProgramRead.model_validate(p) for p in programs]
+
     async def get_program(self, program_id: UUID) -> ProgramRead:
         """
         Obtiene un programa por su ID.
