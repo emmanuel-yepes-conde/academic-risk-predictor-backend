@@ -291,7 +291,7 @@ deploy() {
             --image "mcr.microsoft.com/azuredocs/containerapps-helloworld:latest" \
             --target-port 8000 \
             --ingress external \
-            --min-replicas 1 \
+            --min-replicas 0 \
             --max-replicas 2 \
             --cpu 0.5 \
             --memory "1Gi" \
@@ -396,6 +396,15 @@ deploy() {
         ((update_attempt++))
     done
     log_info "Las migraciones Alembic se ejecutan automáticamente al arrancar el contenedor."
+
+    # Subir min-replicas a 1 ahora que la imagen real está desplegada
+    # (con la imagen placeholder hello world fallaba el health check y bloqueaba updates)
+    log_info "Ajustando min-replicas a 1 para visibilidad de logs..."
+    az containerapp update \
+        --name "${ca_name}" \
+        --resource-group "${rg_name}" \
+        --min-replicas 1 \
+        --output none 2>/dev/null || log_warn "No se pudo ajustar min-replicas (no crítico)."
 
     # -----------------------------------------------------------------------
     # Resumen final
