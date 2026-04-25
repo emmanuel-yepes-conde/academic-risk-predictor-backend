@@ -291,8 +291,8 @@ deploy() {
             --image "mcr.microsoft.com/azuredocs/containerapps-helloworld:latest" \
             --target-port 8000 \
             --ingress external \
-            --min-replicas 0 \
-            --max-replicas 1 \
+            --min-replicas 1 \
+            --max-replicas 2 \
             --cpu 0.5 \
             --memory "1Gi" \
             --secrets "database-url=${database_url}" "jwt-secret-key=${JWT_SECRET}" \
