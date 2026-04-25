@@ -13,6 +13,7 @@ Requirements: 1.1, 1.4, 4.1, 4.2, 4.3, 4.4, 9.1, 9.2
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 from uuid import UUID
 
@@ -23,6 +24,7 @@ from app.domain.exceptions import AuthenticationError, InvalidTokenError
 if TYPE_CHECKING:
     from app.application.services.token_service import TokenService
     from app.domain.interfaces.auth_provider import IAuthProvider
+    from app.domain.interfaces.user_repository import IUserRepository
 
 
 class AuthService:
@@ -32,9 +34,11 @@ class AuthService:
         self,
         provider: IAuthProvider,
         token_service: TokenService,
+        user_repo: IUserRepository | None = None,
     ) -> None:
         self._provider = provider
         self._token_service = token_service
+        self._user_repo = user_repo
 
     async def login(self, email: str, password: str) -> TokenResponse:
         """Authenticate a user and return a token pair.
@@ -58,6 +62,15 @@ class AuthService:
 
         if user.status != UserStatusEnum.ACTIVE:
             raise AuthenticationError("Cuenta desactivada", 403)
+
+        # Stamp last_login (best-effort — never block login on failure)
+        if self._user_repo:
+            try:
+                await self._user_repo.update_fields(
+                    user.id, {"last_login": datetime.now(timezone.utc)}
+                )
+            except Exception:
+                pass
 
         access_token = self._token_service.create_access_token(user.id, user.role, user.full_name)
         refresh_token = self._token_service.create_refresh_token(user.id, user.role, user.full_name)

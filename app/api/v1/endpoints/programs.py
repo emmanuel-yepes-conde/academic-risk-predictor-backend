@@ -70,6 +70,28 @@ async def update_program(
 
 
 # ---------------------------------------------------------------------------
+# GET /programs — any authenticated user (list all)
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/programs",
+    response_model=list[ProgramRead],
+    status_code=200,
+    summary="Listar todos los programas académicos",
+    description="Retorna la lista de todos los programas. Accesible para cualquier usuario autenticado.",
+    tags=["Programas"],
+)
+async def list_programs(
+    skip: int = 0,
+    limit: int = 100,
+    current_user: CurrentUser = Depends(get_current_user),
+    service: ProgramService = Depends(_get_service),
+) -> list[ProgramRead]:
+    return await service.list_programs(skip=skip, limit=limit)
+
+
+# ---------------------------------------------------------------------------
 # GET /programs/{program_id} — any authenticated user
 # ---------------------------------------------------------------------------
 

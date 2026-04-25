@@ -51,8 +51,8 @@ DB_POOL_MIN=5
 DB_POOL_MAX=20
 DB_ECHO=false
 
-# JWT — ⚠️ Cambiar en producción
-JWT_SECRET_KEY=cqKda59D2V2FdKxKGzhc-n4kK3aWIGFgR_k5ZcbCY0U
+# JWT — ⚠️ Generar uno nuevo con: python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+JWT_SECRET_KEY=REEMPLAZAR_CON_CLAVE_SEGURA
 JWT_ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=30
 REFRESH_TOKEN_EXPIRE_DAYS=7
@@ -64,12 +64,12 @@ DATASET_PATH=datasets/dataset_estudiantes_decimal.csv
 UMBRAL_RIESGO_ALTO=0.7
 UMBRAL_RIESGO_MEDIO=0.4
 
-# SMTP — correos de notificación (ya configurado)
+# SMTP — credenciales reales en .env local, NUNCA en el repo
 SMTP_SERVER=smtp.gmail.com
 SMTP_PORT=587
-SMTP_USERNAME=academicrisk.notifications@gmail.com
-SMTP_PASSWORD=jzpmnyirzspmeuht
-FROM_EMAIL=academicrisk.notifications@gmail.com
+SMTP_USERNAME=TU_CORREO@gmail.com
+SMTP_PASSWORD=TU_APP_PASSWORD_DE_GMAIL
+FROM_EMAIL=TU_CORREO@gmail.com
 FROM_NAME=Academic Risk Notifications
 
 # Logging

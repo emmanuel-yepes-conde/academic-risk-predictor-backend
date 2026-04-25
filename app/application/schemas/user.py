@@ -25,9 +25,7 @@ class UserCreate(BaseModel):
 class UserUpdate(BaseModel):
     full_name: str | None = None
     role: RoleEnum | None = None
-    microsoft_oid: str | None = None
-    google_oid: str | None = None
-    password_hash: str | None = None
+    password: str | None = None          # plain text — service hashes it
     ml_consent: bool | None = None
     institutional_email: str | None = None
 
@@ -42,6 +40,19 @@ class UserRead(BaseModel):
     ml_consent: bool
     created_at: datetime
     updated_at: datetime
+    last_login: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class AuditLogRead(BaseModel):
+    id: UUID
+    operation: str
+    changed_by_id: UUID | None = None
+    changed_by_name: str | None = None
+    previous_data: dict | None = None
+    new_data: dict | None = None
+    timestamp: datetime
 
     model_config = {"from_attributes": True}
 

@@ -45,7 +45,7 @@ def _get_auth_service(
     """Wire up AuthService with its dependencies."""
     user_repo = UserRepository(session)
     provider = CredentialAuthProvider(user_repo)
-    return AuthService(provider=provider, token_service=token_service)
+    return AuthService(provider=provider, token_service=token_service, user_repo=user_repo)
 
 
 # ---------------------------------------------------------------------------
