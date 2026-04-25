@@ -320,11 +320,25 @@ deploy() {
         --resource-group "${rg_name}" \
         --query 'id' -o tsv)
 
-    az role assignment create \
+    local role_output
+    if ! role_output=$(az role assignment create \
         --assignee "${ca_principal_id}" \
         --role "AcrPull" \
         --scope "${acr_id}" \
-        --output none 2>/dev/null || log_warn "La asignación AcrPull ya existe (esto es normal en re-despliegues)."
+        --output none 2>&1); then
+        if [[ "${role_output}" == *"already exists"* ]] || [[ "${role_output}" == *"RoleAssignmentExists"* ]]; then
+            log_warn "La asignación AcrPull ya existe (normal en re-despliegues)."
+        else
+            log_error "Falló la asignación AcrPull: ${role_output}"
+            exit 1
+        fi
+    else
+        log_success "Rol AcrPull asignado a la identidad del Container App."
+    fi
+
+    # Esperar propagación del rol en Azure AD (típicamente 30-60s)
+    log_info "Esperando 60s para propagación del rol AcrPull..."
+    sleep 60
 
     # Vincular el ACR al Container App usando identidad administrada
     az containerapp registry set \
@@ -360,15 +374,27 @@ deploy() {
     # Paso 6: Actualizar Container App con la imagen real
     # -----------------------------------------------------------------------
     log_info "Paso 6/6: Actualizando Container App '${ca_name}' con la imagen nueva..."
-    if ! az containerapp update \
-        --name "${ca_name}" \
-        --resource-group "${rg_name}" \
-        --image "${acr_login_server}/mpra-backend:latest" \
-        --output none 2>&1; then
-        log_error "Falló la actualización del Container App '${ca_name}'."
-        exit 1
-    fi
-    log_success "Container App '${ca_name}' actualizado con la imagen nueva."
+    local update_output
+    local update_attempt=1
+    local max_attempts=4
+    while (( update_attempt <= max_attempts )); do
+        if update_output=$(az containerapp update \
+            --name "${ca_name}" \
+            --resource-group "${rg_name}" \
+            --image "${acr_login_server}/mpra-backend:latest" \
+            --output none 2>&1); then
+            log_success "Container App '${ca_name}' actualizado con la imagen nueva."
+            break
+        fi
+        if (( update_attempt == max_attempts )); then
+            log_error "Falló la actualización del Container App tras ${max_attempts} intentos."
+            log_error "Último error: ${update_output}"
+            exit 1
+        fi
+        log_warn "Intento ${update_attempt}/${max_attempts} falló (probable propagación de rol). Reintentando en 30s..."
+        sleep 30
+        ((update_attempt++))
+    done
     log_info "Las migraciones Alembic se ejecutan automáticamente al arrancar el contenedor."
 
     # -----------------------------------------------------------------------
