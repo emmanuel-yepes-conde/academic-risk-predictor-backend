@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.schemas.enrollment import (
     EnrollmentCreate,
+    EnrollmentGradesUpdate,
     EnrollmentRead,
     EnrollmentStatusUpdate,
     EnrollmentUpdate,
@@ -153,3 +154,46 @@ async def list_student_enrollments(
     service: EnrollmentService = Depends(_get_enrollment_service),
 ) -> list[EnrollmentRead]:
     return await service.list_student_enrollments(student_id, current_user, status)
+
+
+# ---------------------------------------------------------------------------
+# PATCH /enrollments/{enrollment_id}/grades — PROFESSOR or ADMIN sets grades
+# ---------------------------------------------------------------------------
+
+@router.patch(
+    "/enrollments/{enrollment_id}/grades",
+    response_model=EnrollmentRead,
+    status_code=200,
+    summary="Registrar indicadores académicos de una inscripción",
+    description=(
+        "Permite a un PROFESSOR o ADMIN registrar/actualizar los indicadores académicos "
+        "(asistencia, seguimiento, nota_parcial_1, logins, uso_tutorias) de una inscripción. "
+        "Solo se actualizan los campos proporcionados."
+    ),
+    tags=["Inscripciones"],
+)
+async def update_enrollment_grades(
+    enrollment_id: UUID,
+    body: EnrollmentGradesUpdate,
+    current_user: CurrentUser = Depends(require_roles(RoleEnum.ADMIN, RoleEnum.PROFESSOR)),
+    session: AsyncSession = Depends(get_session),
+) -> EnrollmentRead:
+    from sqlalchemy import select
+    from app.infrastructure.models.enrollment import Enrollment as EnrollmentModel
+    result = await session.execute(
+        select(EnrollmentModel).where(EnrollmentModel.id == enrollment_id)
+    )
+    enrollment = result.scalar_one_or_none()
+    if enrollment is None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Inscripción no encontrada")
+
+    update_data = body.model_dump(exclude_none=True)
+    for field, value in update_data.items():
+        setattr(enrollment, field, value)
+    from datetime import datetime, timezone
+    enrollment.updated_at = datetime.now(timezone.utc)
+    session.add(enrollment)
+    await session.commit()
+    await session.refresh(enrollment)
+    return EnrollmentRead.model_validate(enrollment)

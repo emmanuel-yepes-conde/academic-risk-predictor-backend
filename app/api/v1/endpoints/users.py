@@ -15,7 +15,9 @@ Requisitos: 1.x, 2.x, 3.x, 4.x, 5.x, 6.1–6.5, 7.x
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.schemas.user import (
@@ -29,12 +31,27 @@ from app.application.schemas.user import (
 from app.application.services.user_service import UserService
 from app.api.v1.dependencies.auth import (
     CurrentUser,
+    get_current_user,
     require_roles,
     require_self_or_roles,
 )
 from app.domain.enums import RoleEnum, UserStatusEnum
 from app.infrastructure.database import get_session
 from app.infrastructure.repositories.user_repository import UserRepository
+
+
+class StudentProfileRead(BaseModel):
+    semester: Optional[int] = None
+    academic_year: Optional[int] = None
+    enrolled_credits: Optional[float] = None
+    enrollment_status: Optional[str] = None
+    program_action: Optional[str] = None
+    socioeconomic_stratum: Optional[int] = None
+    cohort: Optional[str] = None
+    program_id: Optional[str] = None
+
+    class Config:
+        from_attributes = True
 
 router = APIRouter()
 
@@ -139,3 +156,33 @@ async def update_user_status(
 ) -> UserRead:
     """Cambia el estado de un usuario (soft delete / reactivación). Requisitos: 5.1–5.4, 6.4"""
     return await service.update_user_status(user_id, body.status)
+
+
+# ---------------------------------------------------------------------------
+# GET /students/{student_id}/profile — STUDENT (self) or ADMIN
+# ---------------------------------------------------------------------------
+
+@router.get("/students/{student_id}/profile", response_model=StudentProfileRead, status_code=200)
+async def get_student_profile(
+    student_id: UUID,
+    current_user: CurrentUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> StudentProfileRead:
+    """Retorna el perfil académico de un estudiante (semestre, créditos, etc.)."""
+    from app.infrastructure.models.student_profile import StudentProfile as SPModel
+    result = await session.execute(
+        select(SPModel).where(SPModel.user_id == student_id)
+    )
+    profile = result.scalar_one_or_none()
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Perfil de estudiante no encontrado")
+    return StudentProfileRead(
+        semester=profile.semester,
+        academic_year=profile.academic_year,
+        enrolled_credits=float(profile.enrolled_credits) if profile.enrolled_credits is not None else None,
+        enrollment_status=profile.enrollment_status,
+        program_action=profile.program_action,
+        socioeconomic_stratum=profile.socioeconomic_stratum,
+        cohort=profile.cohort,
+        program_id=str(profile.program_id) if profile.program_id else None,
+    )

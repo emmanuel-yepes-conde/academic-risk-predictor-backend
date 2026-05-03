@@ -4,6 +4,8 @@ Modelo ORM SQLModel para la entidad Enrollment (Inscripción).
 
 import uuid
 from datetime import datetime, timezone
+from decimal import Decimal
+from typing import Optional
 
 import sqlalchemy as sa
 from sqlalchemy import UniqueConstraint
@@ -32,3 +34,10 @@ class Enrollment(SQLModel, table=True):
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
     )
+
+    # ── Academic indicator fields (set by professors) ──────────────────────────
+    asistencia:     Optional[Decimal] = Field(default=None, sa_column=sa.Column(sa.Numeric(5, 2), nullable=True))
+    seguimiento:    Optional[Decimal] = Field(default=None, sa_column=sa.Column(sa.Numeric(3, 2), nullable=True))
+    nota_parcial_1: Optional[Decimal] = Field(default=None, sa_column=sa.Column(sa.Numeric(3, 2), nullable=True))
+    logins:         Optional[int]     = Field(default=None, sa_column=sa.Column(sa.Integer(), nullable=True))
+    uso_tutorias:   Optional[bool]    = Field(default=None, sa_column=sa.Column(sa.Boolean(), nullable=True))
