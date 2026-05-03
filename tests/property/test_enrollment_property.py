@@ -68,6 +68,12 @@ def _make_enrollment_mock(
     enrollment.status = status
     enrollment.enrollment_date = _NOW
     enrollment.updated_at = _NOW
+    # Academic indicator fields — null until set by a professor
+    enrollment.asistencia = None
+    enrollment.seguimiento = None
+    enrollment.nota_parcial_1 = None
+    enrollment.logins = None
+    enrollment.uso_tutorias = None
     return enrollment
 
 
