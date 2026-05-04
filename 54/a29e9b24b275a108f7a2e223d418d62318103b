@@ -1,0 +1,27 @@
+app/application/schemas/enrollment.py
+  b03b3a99345ebca4 32-37
+app/infrastructure/models/enrollment.py
+  b03b3a99345ebca4 38-44
+alembic/versions/0013_add_last_login_to_users.py
+  b03b3a99345ebca4 17-18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "54a29e9b24b275a108f7a2e223d418d62318103b",
+  "prompts": {
+    "b03b3a99345ebca4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "379dbf03-6b10-4ee4-83b4-56a99a81b41a",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "daforonda_meli",
+      "messages": [],
+      "total_additions": 15,
+      "total_deletions": 5,
+      "accepted_lines": 50,
+      "overriden_lines": 0
+    }
+  }
+}
