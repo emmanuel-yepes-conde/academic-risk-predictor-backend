@@ -29,6 +29,12 @@ class EnrollmentRead(BaseModel):
     status: EnrollmentStatusEnum
     enrollment_date: datetime
     updated_at: datetime
+    # Academic indicator fields (flat columns) — null until set by a professor
+    asistencia:      Decimal | None = None
+    seguimiento:     Decimal | None = None
+    nota_parcial_1:  Decimal | None = None
+    logins:          int     | None = None
+    uso_tutorias:    bool    | None = None
 
     model_config = {"from_attributes": True}
 
