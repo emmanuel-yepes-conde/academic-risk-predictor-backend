@@ -121,6 +121,39 @@ class EnrollmentRepository(IEnrollmentRepository):
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
+    async def update_grades(
+        self,
+        enrollment_id: UUID,
+        grades: dict,
+        first_cohort_grade: float | None,
+        second_cohort_grade: float | None,
+        third_cohort_grade: float | None,
+        final_grade: float | None,
+        user_id: UUID,
+    ) -> Enrollment | None:
+        """UPDATE grades JSON + calculated cohort/final grades and register an audit log."""
+        enrollment = await self.get_by_id(enrollment_id)
+        if enrollment is None:
+            return None
+
+        enrollment.grades = grades
+        enrollment.first_cohort_grade = first_cohort_grade
+        enrollment.second_cohort_grade = second_cohort_grade
+        enrollment.third_cohort_grade = third_cohort_grade
+        enrollment.final_grade = final_grade
+
+        self._session.add(enrollment)
+        await self._session.flush()
+        await self._session.refresh(enrollment)
+        await self._audit.register(AuditLogCreate(
+            table_name="enrollments",
+            operation=OperationEnum.UPDATE,
+            record_id=enrollment_id,
+            user_id=user_id,
+            new_data={"grades": grades},
+        ))
+        return enrollment
+
     async def list_by_student_filtered_by_professor(
         self, student_id: UUID, professor_id: UUID,
         status: EnrollmentStatusEnum | None = None,

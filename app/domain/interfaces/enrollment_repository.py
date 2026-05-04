@@ -43,3 +43,15 @@ class IEnrollmentRepository(ABC):
         self, student_id: UUID, professor_id: UUID,
         status: EnrollmentStatusEnum | None = None,
     ) -> list[Enrollment]: ...
+
+    @abstractmethod
+    async def update_grades(
+        self,
+        enrollment_id: UUID,
+        grades: dict,
+        first_cohort_grade: float | None,
+        second_cohort_grade: float | None,
+        third_cohort_grade: float | None,
+        final_grade: float | None,
+        user_id: UUID,
+    ) -> "Enrollment | None": ...
