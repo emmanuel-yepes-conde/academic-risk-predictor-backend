@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 from app.core.config import settings
 from app.api.v1.endpoints import (
     prediction, health, users, auth,
-    notifications, programs, courses, enrollments,
+    notifications, programs, courses, enrollments, referrals,
 )
 from app.domain.exceptions import (
     AuthenticationError,
@@ -91,6 +91,7 @@ app.include_router(users.router,         prefix="/api/v1", tags=["Usuarios"])
 app.include_router(programs.router,      prefix="/api/v1", tags=["Programas"])
 app.include_router(courses.router,       prefix="/api/v1", tags=["Cursos"])
 app.include_router(enrollments.router,   prefix="/api/v1", tags=["Inscripciones"])
+app.include_router(referrals.router,     prefix="/api/v1", tags=["Remisiones"])
 app.include_router(notifications.router, prefix="/api/v1", tags=["Notificaciones"])
 
 
