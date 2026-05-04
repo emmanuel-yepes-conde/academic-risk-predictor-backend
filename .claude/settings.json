@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c ' *)",
+      "Bash(python3 -c ' *)",
+      "Bash(python3 -c \"import ast; ast.parse\\(open\\('scripts/seed_student.py'\\).read\\(\\)\\); print\\('OK sintaxis'\\)\")",
+      "Bash(python3 -m scripts.seed_student)",
+      "Bash(alembic upgrade *)",
+      "Bash(npx tsc *)",
+      "Bash(python3 -m scripts.update_student_grades)"
+    ]
+  }
+}
