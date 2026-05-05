@@ -1,0 +1,159 @@
+"""ReferralService — lógica de negocio para remisiones a permanencia."""
+
+from datetime import datetime, timezone
+from uuid import UUID
+
+from fastapi import HTTPException
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.application.schemas.referral import (
+    EvaluationConfigRead,
+    EvaluationConfigUpdate,
+    ReferralCreate,
+    ReferralRead,
+    ReferralUpdate,
+)
+from app.domain.enums import RoleEnum
+from app.infrastructure.models.course import Course
+from app.infrastructure.models.enrollment import Enrollment
+from app.infrastructure.repositories.referral_repository import ReferralRepository
+
+
+class ReferralService:
+    def __init__(self, repo: ReferralRepository, session: AsyncSession) -> None:
+        self._repo    = repo
+        self._session = session
+
+    # ── helpers de acceso ────────────────────────────────────────────────────
+
+    async def _get_enrollment(self, enrollment_id: UUID) -> Enrollment:
+        result = await self._session.execute(
+            select(Enrollment).where(Enrollment.id == enrollment_id)
+        )
+        enrollment = result.scalar_one_or_none()
+        if enrollment is None:
+            raise HTTPException(status_code=404, detail="Inscripción no encontrada")
+        return enrollment
+
+    async def _get_course(self, course_id: UUID) -> Course:
+        result = await self._session.execute(
+            select(Course).where(Course.id == course_id)
+        )
+        course = result.scalar_one_or_none()
+        if course is None:
+            raise HTTPException(status_code=404, detail="Curso no encontrado")
+        return course
+
+    async def _check_professor_access(self, enrollment: Enrollment, professor_id: UUID) -> None:
+        course = await self._get_course(enrollment.course_id)
+        if course.professor_id != professor_id:
+            raise HTTPException(status_code=403, detail="No tiene permisos sobre esta inscripción")
+
+    # ── CRUD remisiones ──────────────────────────────────────────────────────
+
+    async def create(
+        self, enrollment_id: UUID, body: ReferralCreate, current_user: object
+    ) -> ReferralRead:
+        enrollment = await self._get_enrollment(enrollment_id)
+
+        if current_user.role == RoleEnum.PROFESSOR:
+            await self._check_professor_access(enrollment, current_user.id)
+        elif current_user.role != RoleEnum.ADMIN:
+            raise HTTPException(status_code=403, detail="Acceso denegado")
+
+        referral = await self._repo.create({
+            "enrollment_id":      enrollment_id,
+            "created_by":         current_user.id,
+            "tipo_remision":      body.tipo_remision.value,
+            "tipo_remision_otro": body.tipo_remision_otro,
+            "observaciones":      body.observaciones,
+            "fecha_remision":     body.fecha_remision,
+            "asistio":            "Sin confirmar",
+            "status":             "PENDIENTE",
+            "created_at":         datetime.now(timezone.utc),
+            "updated_at":         datetime.now(timezone.utc),
+        })
+        return ReferralRead.model_validate(referral)
+
+    async def list_by_enrollment(
+        self, enrollment_id: UUID, current_user: object
+    ) -> list[ReferralRead]:
+        enrollment = await self._get_enrollment(enrollment_id)
+
+        if current_user.role == RoleEnum.STUDENT:
+            if enrollment.student_id != current_user.id:
+                raise HTTPException(status_code=403, detail="Acceso denegado")
+        elif current_user.role == RoleEnum.PROFESSOR:
+            await self._check_professor_access(enrollment, current_user.id)
+
+        referrals = await self._repo.list_by_enrollment(enrollment_id)
+        return [ReferralRead.model_validate(r) for r in referrals]
+
+    async def list_by_course(
+        self, course_id: UUID, current_user: object
+    ) -> list[ReferralRead]:
+        course = await self._get_course(course_id)
+
+        if current_user.role == RoleEnum.PROFESSOR and course.professor_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Acceso denegado")
+
+        referrals = await self._repo.list_by_course(course_id)
+        return [ReferralRead.model_validate(r) for r in referrals]
+
+    async def update(
+        self, referral_id: UUID, body: ReferralUpdate, current_user: object
+    ) -> ReferralRead:
+        referral = await self._repo.get_by_id(referral_id)
+        if referral is None:
+            raise HTTPException(status_code=404, detail="Remisión no encontrada")
+
+        if current_user.role == RoleEnum.PROFESSOR and referral.created_by != current_user.id:
+            raise HTTPException(status_code=403, detail="Solo puede editar sus propias remisiones")
+        elif current_user.role == RoleEnum.STUDENT:
+            raise HTTPException(status_code=403, detail="Acceso denegado")
+
+        fields = body.model_dump(exclude_unset=True)
+        # Serializar enums a sus valores string para columnas VARCHAR
+        if "asistio" in fields and fields["asistio"] is not None:
+            fields["asistio"] = fields["asistio"].value if hasattr(fields["asistio"], "value") else fields["asistio"]
+        if "status" in fields and fields["status"] is not None:
+            fields["status"] = fields["status"].value if hasattr(fields["status"], "value") else fields["status"]
+        updated = await self._repo.update(referral_id, fields)
+        return ReferralRead.model_validate(updated)
+
+    # ── Configuración de evaluación del curso ────────────────────────────────
+
+    async def get_evaluation_config(
+        self, course_id: UUID, current_user: object
+    ) -> EvaluationConfigRead:
+        course = await self._get_course(course_id)
+
+        if current_user.role == RoleEnum.STUDENT:
+            raise HTTPException(status_code=403, detail="Acceso denegado")
+
+        cuts = (course.evaluation_config or {}).get("cuts", [])
+        return EvaluationConfigRead(course_id=course_id, cuts=cuts)
+
+    async def set_evaluation_config(
+        self, course_id: UUID, body: EvaluationConfigUpdate, current_user: object
+    ) -> EvaluationConfigRead:
+        course = await self._get_course(course_id)
+
+        if current_user.role == RoleEnum.PROFESSOR and course.professor_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Solo puede configurar sus propios cursos")
+        elif current_user.role == RoleEnum.STUDENT:
+            raise HTTPException(status_code=403, detail="Acceso denegado")
+
+        cuts_data = [c.model_dump() for c in body.cuts]
+        # Serialize evaluation_date to string for JSONB storage
+        for cut in cuts_data:
+            if cut.get("evaluation_date") is not None:
+                cut["evaluation_date"] = str(cut["evaluation_date"])
+
+        course.evaluation_config = {"cuts": cuts_data}
+        self._session.add(course)
+        await self._session.flush()
+        await self._session.refresh(course)
+
+        return EvaluationConfigRead(course_id=course_id, cuts=body.cuts)

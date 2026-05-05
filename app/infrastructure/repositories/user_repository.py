@@ -3,6 +3,7 @@ User repository implementation (Req 6.1, 7.1, 7.2, 7.3).
 Each write operation registers an atomic AuditLog entry in the same session.
 RB-04 privacy filter applied when professor_id is provided.
 """
+from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any
@@ -17,6 +18,7 @@ from app.domain.enums import OperationEnum, RoleEnum, UserStatusEnum
 from app.domain.interfaces.user_repository import IUserRepository
 from app.infrastructure.models.course import Course
 from app.infrastructure.models.enrollment import Enrollment
+from app.infrastructure.models.student_profile import StudentProfile
 from app.infrastructure.models.user import User
 from app.infrastructure.repositories.audit_log_repository import AuditLogRepository
 
@@ -31,10 +33,12 @@ class UserRepository(IUserRepository):
         role: RoleEnum | None,
         professor_id: UUID | None,
         status: UserStatusEnum | None,
+        program_id: UUID | None = None,
     ) -> Select:
         """
         Build a SELECT statement with the appropriate filters applied.
         When professor_id is provided, applies RB-04 privacy filter via JOIN.
+        When program_id is provided, filters students by program via student_profiles.
         The repository is agnostic to the status=ACTIVE default — that default
         is applied in UserService, not here.
         """
@@ -54,6 +58,13 @@ class UserRepository(IUserRepository):
             stmt = select(User)
             if role is not None:
                 stmt = stmt.where(User.role == role)
+
+        if program_id is not None:
+            # Filter by program: join student_profiles on user_id
+            stmt = (
+                stmt.join(StudentProfile, StudentProfile.user_id == User.id)
+                .where(StudentProfile.program_id == program_id)
+            )
 
         if status is not None:
             stmt = stmt.where(User.status == status)
@@ -114,13 +125,15 @@ class UserRepository(IUserRepository):
         status: UserStatusEnum | None = None,
         skip: int = 0,
         limit: int = 100,
+        program_id: UUID | None = None,
     ) -> list[User]:
         """
         List users with optional filters.
         When professor_id is provided, applies RB-04 privacy filter:
         only returns students enrolled in courses assigned to that professor.
+        When program_id is provided, filters by student program.
         """
-        stmt = self._build_filter_stmt(role, professor_id, status)
+        stmt = self._build_filter_stmt(role, professor_id, status, program_id)
         stmt = stmt.offset(skip).limit(limit)
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
@@ -130,12 +143,13 @@ class UserRepository(IUserRepository):
         role: RoleEnum | None = None,
         professor_id: UUID | None = None,
         status: UserStatusEnum | None = None,
+        program_id: UUID | None = None,
     ) -> int:
         """
         Count users matching the same filters as list(), without loading records.
         Uses SELECT COUNT(*) for efficiency.
         """
-        filter_stmt = self._build_filter_stmt(role, professor_id, status)
+        filter_stmt = self._build_filter_stmt(role, professor_id, status, program_id)
         # Wrap the filtered query as a subquery for COUNT
         count_stmt = select(func.count()).select_from(filter_stmt.subquery())
         result = await self._session.execute(count_stmt)
@@ -166,6 +180,68 @@ class UserRepository(IUserRepository):
             new_data=updates,
         ))
         return user
+
+    async def update_from_dict(self, id: UUID, data: dict[str, Any]) -> User | None:
+        """Update user from a pre-processed dict (e.g. with password already hashed). Registers audit log."""
+        user = await self.get_by_id(id)
+        if user is None:
+            return None
+
+        previous = {
+            k: str(v) if not isinstance(v, (str, int, float, bool, type(None))) else v
+            for k, v in user.model_dump().items()
+        }
+        for field, value in data.items():
+            setattr(user, field, value)
+        user.updated_at = datetime.now(timezone.utc)
+
+        self._session.add(user)
+        await self._session.flush()
+        await self._session.refresh(user)
+        await self._audit.register(AuditLogCreate(
+            table_name="users",
+            operation=OperationEnum.UPDATE,
+            record_id=id,
+            previous_data=previous,
+            new_data={k: v for k, v in data.items() if k != "password_hash"},
+        ))
+        return user
+
+    async def update_fields(self, id: UUID, fields: dict[str, Any]) -> User | None:
+        """Lightweight internal update — no audit log (used for last_login stamp)."""
+        user = await self.get_by_id(id)
+        if user is None:
+            return None
+        for k, v in fields.items():
+            setattr(user, k, v)
+        self._session.add(user)
+        await self._session.flush()
+        return user
+
+    async def get_audit_history(self, record_id: UUID) -> list[Any]:
+        """Return audit log entries for a user record, newest first."""
+        from app.infrastructure.models.audit_log import AuditLog
+        stmt = (
+            select(AuditLog, User)
+            .outerjoin(User, User.id == AuditLog.user_id)
+            .where(AuditLog.table_name == "users")
+            .where(AuditLog.record_id == record_id)
+            .order_by(AuditLog.timestamp.desc())
+        )
+        result = await self._session.execute(stmt)
+        rows = result.all()
+        return [
+            {
+                "id": str(log.id),
+                "operation": log.operation.value if hasattr(log.operation, "value") else log.operation,
+                "changed_by_id": str(log.user_id) if log.user_id else None,
+                "changed_by_name": changer.full_name if changer else None,
+                "previous_data": log.previous_data,
+                "new_data": log.new_data,
+                "timestamp": log.timestamp,
+            }
+            for log, changer in rows
+        ]
 
     async def update_status(self, id: UUID, status: UserStatusEnum) -> User | None:
         """

@@ -16,6 +16,7 @@ from app.application.schemas.enrollment import (
     EnrollmentUpdate,
     GradesRead,
     GradesUpdate,
+    IndicatorsUpdate,
     RiskFromEnrollmentRequest,
 )
 from app.application.services.enrollment_service import EnrollmentService
@@ -191,6 +192,29 @@ async def list_student_enrollments(
 # ===========================================================================
 # Grades & Risk endpoints
 # ===========================================================================
+
+@router.patch(
+    "/enrollments/{enrollment_id}/indicators",
+    response_model=EnrollmentRead,
+    status_code=200,
+    summary="Actualizar indicadores planos de una inscripción",
+    description=(
+        "Actualiza los indicadores académicos planos de una inscripción: "
+        "asistencia, seguimiento, nota_parcial_1, logins, uso_tutorias. "
+        "Solo los campos incluidos en el cuerpo serán actualizados. "
+        "PROFESSOR: solo puede actualizar inscripciones en sus cursos. "
+        "ADMIN: acceso total."
+    ),
+    tags=["Inscripciones"],
+)
+async def update_enrollment_indicators(
+    enrollment_id: UUID,
+    body: IndicatorsUpdate,
+    current_user: CurrentUser = Depends(get_current_user),
+    service: EnrollmentService = Depends(_get_enrollment_service),
+) -> EnrollmentRead:
+    return await service.update_indicators(enrollment_id, body, current_user)
+
 
 @router.get(
     "/enrollments/{enrollment_id}/grades",

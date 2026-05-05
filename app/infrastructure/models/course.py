@@ -7,6 +7,7 @@ import uuid
 from datetime import datetime, timezone
 
 import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, SQLModel
 
 from app.domain.enums import CourseStatusEnum
@@ -32,6 +33,12 @@ class Course(SQLModel, table=True):
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
+    )
+
+    # Estructura: [{"id": "first_cohort", "name": "Corte Uno", "percentage": 30, "date": "2026-03-08"}, ...]
+    evaluation_config: dict | None = Field(
+        default=None,
+        sa_column=sa.Column(JSONB, nullable=True),
     )
 
     __table_args__ = (

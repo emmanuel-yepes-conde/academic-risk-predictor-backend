@@ -27,16 +27,13 @@ AsyncSessionFactory = async_sessionmaker(engine, expire_on_commit=False)
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
     """
     Generador asíncrono de sesiones de DB compatible con FastAPI Depends.
-    Hace commit en éxito y rollback ante cualquier excepción.
-    Gestión manual del ciclo de vida para evitar IllegalStateChangeError
-    (conflicto entre close() y _connection_for_bind() en SQLAlchemy 2.x + asyncpg).
+
+    Usa el patrón oficial de SQLAlchemy 2.x para Python 3.13:
+    - `async with AsyncSessionFactory()` garantiza que close() se llame
+      solo cuando no haya operaciones en vuelo (evita IllegalStateChangeError).
+    - `async with session.begin()` hace commit automático al salir con éxito
+      y rollback automático ante cualquier excepción, sin llamadas manuales.
     """
-    session: AsyncSession = AsyncSessionFactory()
-    try:
-        yield session
-        await session.commit()
-    except Exception:
-        await session.rollback()
-        raise
-    finally:
-        await session.close()
+    async with AsyncSessionFactory() as session:
+        async with session.begin():
+            yield session

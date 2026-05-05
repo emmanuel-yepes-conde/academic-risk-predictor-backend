@@ -19,6 +19,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.schemas.user import (
+    AuditLogRead,
     PaginatedResponse,
     UserCreate,
     UserRead,
@@ -51,6 +52,7 @@ async def list_users(
     role: Optional[RoleEnum] = None,
     professor_id: Optional[UUID] = None,
     status: Optional[UserStatusEnum] = None,
+    program_id: Optional[UUID] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     current_user: CurrentUser = Depends(require_roles(RoleEnum.ADMIN, RoleEnum.PROFESSOR)),
@@ -63,6 +65,7 @@ async def list_users(
         status=status,
         skip=skip,
         limit=limit,
+        program_id=program_id,
     )
 
 
@@ -92,6 +95,20 @@ async def get_user(
 ) -> UserRead:
     """Obtiene un usuario por ID. Requisitos: 3.1–3.3, 6.5"""
     return await service.get_user(user_id)
+
+
+# ---------------------------------------------------------------------------
+# GET /users/{user_id}/history — ADMIN only (audit log)
+# ---------------------------------------------------------------------------
+
+@router.get("/users/{user_id}/history", response_model=list[AuditLogRead], status_code=200)
+async def get_user_history(
+    user_id: UUID,
+    current_user: CurrentUser = Depends(require_roles(RoleEnum.ADMIN)),
+    service: UserService = Depends(_get_service),
+) -> list[AuditLogRead]:
+    """Devuelve el historial de cambios de un usuario (quién cambió qué y cuándo)."""
+    return await service.get_user_history(user_id)
 
 
 # ---------------------------------------------------------------------------

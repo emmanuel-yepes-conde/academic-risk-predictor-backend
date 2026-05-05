@@ -1,25 +1,23 @@
 """Pydantic DTOs for Program operations."""
 
 from datetime import datetime
-from uuid import UUID
+from uuid import UUID  # noqa: F401 — used by ProgramRead
 
 from pydantic import BaseModel, Field
 
 
 class ProgramCreate(BaseModel):
-    """Schema de entrada para POST /programs. Todos los campos requeridos."""
-
-    institution: str = Field(..., description="Institución (ej. USBCO)")
-    degree_type: str = Field(..., description="Grado (ej. PREG)")
-    program_code: str = Field(..., description="Código del programa (ej. M0200)")
-    program_name: str = Field(..., description="Nombre del programa académico")
-    location: str = Field(..., description="Ubicación del programa (ej. SAN BENITO)")
-    snies_code: int = Field(..., description="Código SNIES del Ministerio de Educación")
+    """Schema de entrada para POST /programs."""
+    institution: str = Field(..., description="Nombre de la institución")
+    degree_type: str = Field(default="PREG", description="Tipo de grado, ej: PREG, POST")
+    program_code: str = Field(..., description="Código del programa, ej: IS-2024")
+    program_name: str = Field(..., description="Nombre completo del programa")
+    location: str = Field(default="", description="Sede/ubicación")
+    snies_code: int = Field(..., description="Código SNIES único del programa")
 
 
 class ProgramUpdate(BaseModel):
     """Schema de entrada para PATCH /programs/{program_id}. Todos los campos opcionales."""
-
     institution: str | None = None
     degree_type: str | None = None
     program_code: str | None = None
