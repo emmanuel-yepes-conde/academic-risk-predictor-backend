@@ -1,0 +1,29 @@
+app/services/acs_email_service.py
+  b03b3a99345ebca4 1-394
+app/application/services/referral_service.py
+  b03b3a99345ebca4 3,21,23-25,53-58,88-119
+app/core/config.py
+  b03b3a99345ebca4 117-128
+requirements.txt
+  b03b3a99345ebca4 37-39
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "662a419d61e270fbbecd8703fd3d2899c2e940cd",
+  "prompts": {
+    "b03b3a99345ebca4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "379dbf03-6b10-4ee4-83b4-56a99a81b41a",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "daforonda_meli",
+      "messages": [],
+      "total_additions": 1342,
+      "total_deletions": 26,
+      "accepted_lines": 1318,
+      "overriden_lines": 0
+    }
+  }
+}
