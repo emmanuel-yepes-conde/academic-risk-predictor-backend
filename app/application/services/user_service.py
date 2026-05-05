@@ -2,7 +2,6 @@
 UserService — lógica de negocio para operaciones CRUD de usuarios.
 """
 
-import asyncio
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -38,10 +37,8 @@ class UserService:
         if status is None:
             status = UserStatusEnum.ACTIVE
 
-        users, total = await asyncio.gather(
-            self._repo.list(role=role, professor_id=professor_id, status=status, skip=skip, limit=limit),
-            self._repo.count(role=role, professor_id=professor_id, status=status),
-        )
+        users = await self._repo.list(role=role, professor_id=professor_id, status=status, skip=skip, limit=limit)
+        total = await self._repo.count(role=role, professor_id=professor_id, status=status)
 
         return PaginatedResponse[UserRead](
             data=[UserRead.model_validate(u) for u in users],
