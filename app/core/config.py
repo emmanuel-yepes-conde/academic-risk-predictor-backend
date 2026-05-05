@@ -114,6 +114,18 @@ class Settings(BaseSettings):
     FROM_EMAIL: str = Field(default="", description="Dirección de correo remitente")
     FROM_NAME: str = Field(default="Academic Risk Notifications", description="Nombre del remitente")
 
+    # Azure Communication Services (ACS) — notificaciones de remisiones
+    # Si no se configuran, el servicio ACS queda desactivado sin afectar el resto.
+    ACS_CONNECTION_STRING: str = Field(default="", description="Connection string de ACS")
+    ACS_SENDER_EMAIL: str = Field(
+        default="DoNotReply@b314ee6e-8e72-4c0e-91f3-3653467003fa.us5.azurecomm.net",
+        description="Dirección remitente configurada en ACS",
+    )
+    ACS_CONSEJERIA_EMAIL: str = Field(
+        default="",
+        description="Correo del área de consejería/permanencia que recibe notificaciones",
+    )
+
     @model_validator(mode='before')
     @classmethod
     def build_database_url(cls, values: dict) -> dict:
