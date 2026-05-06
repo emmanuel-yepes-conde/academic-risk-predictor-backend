@@ -125,6 +125,10 @@ class Settings(BaseSettings):
         default="",
         description="Correo del área de consejería/permanencia que recibe notificaciones",
     )
+    FRONTEND_URL: str = Field(
+        default="http://localhost:3000",
+        description="URL base del frontend — se usa en los botones de los correos",
+    )
 
     @model_validator(mode='before')
     @classmethod
