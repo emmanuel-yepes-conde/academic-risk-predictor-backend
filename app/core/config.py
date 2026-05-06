@@ -118,7 +118,7 @@ class Settings(BaseSettings):
     # Si no se configuran, el servicio ACS queda desactivado sin afectar el resto.
     ACS_CONNECTION_STRING: str = Field(default="", description="Connection string de ACS")
     ACS_SENDER_EMAIL: str = Field(
-        default="DoNotReply@b314ee6e-8e72-4c0e-91f3-3653467003fa.us5.azurecomm.net",
+        default="DoNotReply@b314ee6e-8e72-4c0e-91f3-3653467003fa.azurecomm.net",
         description="Dirección remitente configurada en ACS",
     )
     ACS_CONSEJERIA_EMAIL: str = Field(
