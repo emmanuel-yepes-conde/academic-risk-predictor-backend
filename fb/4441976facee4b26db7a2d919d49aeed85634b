@@ -1,0 +1,30 @@
+app/services/acs_email_service.py
+  b03b3a99345ebca4 9,17-21,25-32,36,39,43-63,65-88,90-94,97-145,151-273,276-277,279,281-284,286-288,291,294-322,324-367,371-498,501-502,505-564,567-568,570-572,584-587,589-591,594-596,599-613,615-616,618-623,629-632,635,658-660,662-663,670,674,681-687,692-700,702-712,714-738,741-749,753-756,759,761-763
+app/core/config.py
+  b03b3a99345ebca4 121
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "fb4441976facee4b26db7a2d919d49aeed85634b",
+  "prompts": {
+    "b03b3a99345ebca4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "379dbf03-6b10-4ee4-83b4-56a99a81b41a",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "daforonda_meli",
+      "messages": [],
+      "total_additions": 1335,
+      "total_deletions": 637,
+      "accepted_lines": 1680,
+      "overriden_lines": 0
+    }
+  },
+  "humans": {
+    "h_17dab495521e35": {
+      "author": "daforonda_meli"
+    }
+  }
+}
