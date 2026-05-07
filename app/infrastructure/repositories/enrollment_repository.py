@@ -164,6 +164,35 @@ class EnrollmentRepository(IEnrollmentRepository):
         ))
         return enrollment
 
+    async def update_indicators(
+        self,
+        enrollment_id: UUID,
+        fields: dict,
+        user_id: UUID,
+    ) -> "Enrollment | None":
+        """UPDATE flat indicator columns and register an audit log."""
+        from datetime import datetime, timezone
+
+        enrollment = await self.get_by_id(enrollment_id)
+        if enrollment is None:
+            return None
+
+        for key, value in fields.items():
+            setattr(enrollment, key, value)
+        enrollment.updated_at = datetime.now(timezone.utc)
+
+        self._session.add(enrollment)
+        await self._session.flush()
+        await self._session.refresh(enrollment)
+        await self._audit.register(AuditLogCreate(
+            table_name="enrollments",
+            operation=OperationEnum.UPDATE,
+            record_id=enrollment_id,
+            user_id=user_id,
+            new_data=fields,
+        ))
+        return enrollment
+
     async def list_by_student_filtered_by_professor(
         self, student_id: UUID, professor_id: UUID,
         status: EnrollmentStatusEnum | None = None,
