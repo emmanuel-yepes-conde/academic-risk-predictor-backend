@@ -7,7 +7,10 @@
       "Bash(python3 -m scripts.seed_student)",
       "Bash(alembic upgrade *)",
       "Bash(npx tsc *)",
-      "Bash(python3 -m scripts.update_student_grades)"
+      "Bash(python3 -m scripts.update_student_grades)",
+      "Bash(npm run *)",
+      "Bash(python -c \"from app.api.v1.endpoints.courses import router; from app.application.services.course_service import CourseService; print\\('OK'\\)\")",
+      "Bash(python3 -c \"from app.api.v1.endpoints.courses import router; from app.application.services.course_service import CourseService; print\\('OK'\\)\")"
     ]
   }
 }

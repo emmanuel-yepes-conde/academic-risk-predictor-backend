@@ -146,13 +146,14 @@ Crea el usuario:
 
 ---
 
-## 7. (Opcional) Cargar datos de demo
+## 7. (Opcional) Poblar datos para reentrenamiento ML
 
 ```bash
-python3 scripts/seed_demo.py
+python3 -m scripts.seed_training_program
 ```
 
-Crea universidades, programas, materias y usuarios de ejemplo para probar la plataforma.
+Genera un programa completo (1º a 5º semestre), estudiantes, matrículas y `grades` en JSONB.
+Además, exporta/regenera `datasets/dataset_estudiantes_decimal.csv` para reentrenar el modelo.
 
 ---
 
@@ -218,7 +219,8 @@ academic-risk-predictor-backend/
 │   └── scaler.joblib
 ├── scripts/
 │   ├── seed_admin.py                  # Crea admin@universidad.edu
-│   └── seed_demo.py                   # Carga datos de ejemplo
+│   ├── seed_training_program.py       # Seed masivo + export dataset de entrenamiento
+│   └── update_student_grades.py       # Ajuste manual de grades para un estudiante específico
 ├── docker-compose.yml
 ├── requirements.txt
 ├── alembic.ini
@@ -248,7 +250,8 @@ academic-risk-predictor-backend/
 ### Predicción ML
 | Método | Ruta | Descripción |
 |---|---|---|
-| POST | `/api/v1/predict` | Predicción de riesgo con 5 variables académicas |
+| POST | `/api/v1/predict` | Predicción de riesgo con notas por cohorte y total |
+| POST | `/api/v1/predict/cohort` | Predicción de riesgo de un cohorte (parcial + seguimiento + asistencia) |
 | POST | `/api/v1/chat` | Chat con consejero académico IA |
 
 ### Notificaciones (email)
@@ -265,11 +268,10 @@ academic-risk-predictor-backend/
 - Entrenado con ~99.000 registros
 - Precisión: ~90%
 - Variables de entrada (orden estricto):
-  1. `promedio_asistencia` — % asistencia a clases (0-100)
-  2. `promedio_seguimiento` — calificación seguimientos (0-5)
-  3. `nota_parcial_1` — nota primer parcial (0-5)
-  4. `inicios_sesion_plataforma` — logins en LMS
-  5. `uso_tutorias` — número de tutorías asistidas
+  1. `nota_corte_1` — nota del corte 1 (0-5)
+  2. `nota_corte_2` — nota del corte 2 (0-5)
+  3. `nota_corte_final` — nota del corte final (0-5)
+  4. `nota_total` — nota total ponderada (0-5)
 - Si los archivos `.joblib` no existen, se entrenan automáticamente al iniciar
 
 ---

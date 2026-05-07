@@ -24,35 +24,31 @@ class Referral(SQLModel, table=True):
         description="Profesor que crea la remisión",
     )
 
-    # Tipo de remisión — columnas VARCHAR explícitas para evitar que SQLAlchemy
-    # infiera tipos ENUM de PostgreSQL que no existen en la DB.
-    tipo_remision: ReferralTypeEnum = Field(
+    referral_type: ReferralTypeEnum = Field(
         sa_column=sa.Column(sa.String(100), nullable=False),
     )
-    tipo_remision_otro: str | None = Field(
+    referral_type_other: str | None = Field(
         default=None,
         sa_column=sa.Column(sa.Text, nullable=True),
-        description="Descripción libre cuando tipo_remision == 'Otros'",
+        description="Descripción libre cuando referral_type == 'Otros'",
     )
 
-    observaciones: str = Field(
+    observations: str = Field(
         sa_column=sa.Column(sa.Text, nullable=False),
         description="Observaciones del docente al momento de remitir",
     )
-
-    # Campos que actualiza el consejero/permanencia después
-    observaciones_remision: str | None = Field(
+    counselor_observations: str | None = Field(
         default=None,
         sa_column=sa.Column(sa.Text, nullable=True),
         description="Observaciones del consejero tras la atención",
     )
 
-    fecha_remision: date = Field(
+    referral_date: date = Field(
         sa_column=sa.Column(sa.Date, nullable=False),
         description="Fecha en que se realiza la remisión",
     )
 
-    asistio: AsistioEnum = Field(
+    attended: AsistioEnum = Field(
         default=AsistioEnum.SIN_CONFIRMAR,
         sa_column=sa.Column(
             sa.String(30),

@@ -31,11 +31,19 @@ class ICourseRepository(ABC):
 
     @abstractmethod
     async def list_all(
-        self, skip: int, limit: int, status: CourseStatusEnum | None = None
+        self,
+        skip: int,
+        limit: int,
+        status: CourseStatusEnum | None = None,
+        subject_id: UUID | None = None,
     ) -> list[CourseRead]: ...
 
     @abstractmethod
-    async def count_all(self, status: CourseStatusEnum | None = None) -> int: ...
+    async def count_all(
+        self,
+        status: CourseStatusEnum | None = None,
+        subject_id: UUID | None = None,
+    ) -> int: ...
 
     @abstractmethod
     async def update(self, course_id: UUID, data: CourseUpdate) -> CourseRead | None: ...
@@ -43,6 +51,11 @@ class ICourseRepository(ABC):
     @abstractmethod
     async def update_status(
         self, course_id: UUID, status: CourseStatusEnum
+    ) -> CourseRead | None: ...
+
+    @abstractmethod
+    async def save_evaluation_config(
+        self, course_id: UUID, config: dict
     ) -> CourseRead | None: ...
 
     @abstractmethod

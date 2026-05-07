@@ -35,13 +35,6 @@ class Enrollment(SQLModel, table=True):
         sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
     )
 
-    # ── Flat academic indicator columns (set by professors via PATCH /grades) ──
-    asistencia:     Decimal | None = Field(default=None, sa_column=sa.Column(sa.Numeric(5, 2), nullable=True))
-    seguimiento:    Decimal | None = Field(default=None, sa_column=sa.Column(sa.Numeric(3, 2), nullable=True))
-    nota_parcial_1: Decimal | None = Field(default=None, sa_column=sa.Column(sa.Numeric(3, 2), nullable=True))
-    logins:         int     | None = Field(default=None, sa_column=sa.Column(sa.Integer(),     nullable=True))
-    uso_tutorias:   bool    | None = Field(default=None, sa_column=sa.Column(sa.Boolean(),     nullable=True))
-
     # Notas del estudiante: configuración de cortes + notas por actividad.
     # Estructura: {"first_cohort": {"weight": "30%", "parcial": {"note": 4.0, "weight": "20%"}, ...}, ...}
     # Escala 0.0–5.0. Nota mínima aprobatoria: 3.0.

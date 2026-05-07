@@ -124,6 +124,7 @@ Oferta concreta de una `Subject` en un período y grupo específicos (sección).
 | `professor_id` | UUID \| None (FK→User) | Profesor asignado |
 | `status` | `CourseStatusEnum` | Estado de la oferta |
 | `created_at` | datetime | Fecha de creación |
+| `evaluation_config` | JSONB \| None | Configuración de distribución de notas del curso (cortes, porcentajes y actividades) |
 | — | Constraint | Único: `(subject_id, section, academic_period)` |
 
 ### `Enrollment`
@@ -248,7 +249,8 @@ Los schemas Pydantic viven en `app/application/schemas/`. Son los contratos de e
 | `CourseCreate` | `subject_id`, `section`, `academic_period`, `professor_id?` | Crear sección |
 | `CourseUpdate` | `section?`, `academic_period?`, `professor_id?` | Actualizar sección |
 | `CourseStatusUpdate` | `status: CourseStatusEnum` | Cambiar estado |
-| `CourseRead` | Campos del Course + campos desnormalizados de Subject (`code`, `name`, `credits`, `program_id`) | Leer sección |
+| `CourseRead` | Campos del Course + campos desnormalizados de Subject (`code`, `name`, `credits`, `program_id`) + `evaluation_config?` | Leer sección |
+| `EvaluationConfigUpdate` | `evaluation_config?` o `cuts?` (legacy) | Guardar distribución de evaluación de una sección |
 
 ### Matrículas y Notas (`enrollment.py`)
 
@@ -260,13 +262,16 @@ Los schemas Pydantic viven en `app/application/schemas/`. Son los contratos de e
 | `EnrollmentRead` | `id`, `student_id`, `course_id`, `status`, `enrollment_date`, `updated_at` | Leer matrícula |
 | `GradesRead` | `id`, `student_id`, `course_id`, `grades`, `first_cohort_grade`, `second_cohort_grade`, `third_cohort_grade`, `final_grade` | Leer notas |
 | `GradesUpdate` | `grades: dict` | Registrar/actualizar notas |
-| `RiskFromEnrollmentRequest` | `promedio_asistencia`, `inicios_sesion_plataforma`, `uso_tutorias` | Predicción desde contexto de matrícula |
+| `CourseGradesStructureRead` | `course_id`, `grades` | Leer estructura JSON de notas a nivel curso (desde enrollments) |
+| `RiskFromEnrollmentRequest` | `nota_corte_1`, `nota_corte_2`, `nota_corte_final`, `nota_total` | Predicción manual por cohortes (payload alternativo) |
 
 ### Estudiante / Predicción (`student.py`)
 
 | Schema | Campos | Uso |
 |---|---|---|
-| `StudentInput` | `promedio_asistencia` (0–100), `promedio_seguimiento` (0–5), `nota_parcial_1` (0–5), `inicios_sesion_plataforma` (≥0), `uso_tutorias` (0–10) | Entrada del modelo ML |
+| `StudentInput` | `nota_corte_1` (0–5), `nota_corte_2` (0–5), `nota_corte_final` (0–5), `nota_total` (0–5, opcional autocalculada) | Entrada del modelo ML |
+| `CohortRiskInput` | `cohort_key`, `nota_parcial` (0–5), `promedio_seguimiento` (0–5), `porcentaje_asistencia` (0–100) | Entrada para predicción por cohorte |
+| `CohortRiskOutput` | `cohort_key`, `cohort_name`, `probabilidad_riesgo`, `porcentaje_riesgo`, `nivel_riesgo`, `datos_cohorte`, `detalles_modelo` | Salida de predicción por cohorte |
 | `PredictionOutput` | `probabilidad_riesgo`, `porcentaje_riesgo`, `nivel_riesgo`, `analisis_ia`, `datos_radar`, `detalles_matematicos` | Salida de predicción |
 | `ChatInput` | `pregunta`, `datos_estudiante`, `prediccion_actual?` | Pregunta al asistente IA |
 | `ChatOutput` | `respuesta` | Respuesta del asistente IA |
@@ -301,15 +306,15 @@ Ubicados en `app/application/services/`. Orquestan lógica de negocio, no accede
 | `AuthService` | Login con credenciales, refresh de tokens |
 | `UserService` | CRUD de usuarios con paginación y filtros |
 | `TokenService` | Crear y decodificar JWT (access + refresh) |
-| `CourseService` | CRUD de secciones de cursos |
+| `CourseService` | CRUD de secciones de cursos + guardado de `evaluation_config` |
 | `EnrollmentService` | Matricular/desmatricular estudiantes; lógica de reactivación |
-| `GradeService` | Leer y registrar notas; cálculo por corte y final |
+| `GradeService` | Leer y registrar notas; cálculo por corte/final; guardar/consultar estructura JSON de notas por curso en `enrollments`; en riesgo por cohorte usa asistencia desde `attendance` (o formato legacy porcentual) y retorna `422` si falta el dato |
 | `ProgramService` | CRUD de programas académicos con cascada |
 | `SubjectService` | CRUD de materias; carga masiva por CSV |
 | `ConsentService` | Verificar consentimiento de ML (lanza 403 si no hay) |
-| `MLApplicationService` | Puerta de entrada al ML: verifica consentimiento y delega a `AcademicRiskService` |
+| `MLApplicationService` | Puerta de entrada al ML: verifica consentimiento y delega a `AcademicRiskService` (predicción total y por cohorte) |
 | `ProfessorCourseService` | Asignar profesores; listar estudiantes del profesor (RB-04) |
-| `AcademicRiskService` | Lógica ML pura: carga modelo, escala features, predice, genera análisis IA |
+| `AcademicRiskService` | Lógica ML pura: (1) modelo logístico para riesgo total con cohortes+total; (2) modelo analítico para riesgo por cohorte (parcial+seguimiento+asistencia) |
 
 ---
 
@@ -320,8 +325,8 @@ Las interfaces viven en `app/domain/interfaces/`; las implementaciones en `app/i
 | Interfaz | Métodos clave |
 |---|---|
 | `IUserRepository` | `create`, `get_by_id`, `get_by_email`, `get_by_microsoft_oid`, `list`, `count`, `update`, `update_status` |
-| `IEnrollmentRepository` | `create`, `get_by_id`, `get_by_student_and_course`, `update_course`, `update_status`, `list_by_student`, `update_grades` |
-| `ICourseRepository` | `create`, `get_by_id`, `list_by_subject`, `list_by_professor`, `list_by_program`, `list_all`, `update`, `update_status`, `list_enrolled_students` |
+| `IEnrollmentRepository` | `create`, `get_by_id`, `get_by_student_and_course`, `update_course`, `update_status`, `list_by_student`, `list_by_course`, `update_grades` |
+| `ICourseRepository` | `create`, `get_by_id`, `list_by_subject`, `list_by_professor`, `list_by_program`, `list_all`, `count_all`, `update`, `update_status`, `save_evaluation_config`, `list_enrolled_students` |
 | `IProgramRepository` | `get_by_id`, `list_all`, `create`, `update`, `get_by_program_code`, `get_by_snies_code`, `delete` |
 | `ISubjectRepository` | `create`, `get_by_id`, `get_by_code(code, program_id)`, `list_by_program`, `list_all`, `update`, `update_status` |
 | `IConsentRepository` | `register_consent`, `get_consent` |
@@ -423,6 +428,7 @@ Base path: `/api/v1`
 | POST | `/courses` | ADMIN | Crear sección |
 | GET | `/courses/{course_id}` | Autenticado | Obtener por ID |
 | PATCH | `/courses/{course_id}` | ADMIN | Actualizar |
+| PATCH | `/courses/{course_id}/evaluation-config` | PROFESSOR, ADMIN | Guardar distribución de evaluación de la sección |
 | PATCH | `/courses/{course_id}/status` | ADMIN | Cambiar estado |
 | POST | `/courses/{course_id}/professor` | ADMIN | Asignar profesor |
 | GET | `/courses/{course_id}/students` | ADMIN, PROFESSOR | Listar estudiantes matriculados |
@@ -436,7 +442,10 @@ Base path: `/api/v1`
 | PATCH | `/enrollments/{enrollment_id}/course` | ADMIN | Cambiar curso |
 | PATCH | `/enrollments/{enrollment_id}/status` | ADMIN | Cambiar estado |
 | GET | `/enrollments/{enrollment_id}/grades` | ADMIN, PROFESSOR, STUDENT(self) | Ver notas |
-| POST | `/enrollments/{enrollment_id}/grades` | ADMIN, PROFESSOR | Registrar notas |
+| PUT | `/enrollments/{enrollment_id}/grades` | ADMIN, PROFESSOR | Registrar notas |
+| POST | `/enrollments/{enrollment_id}/risk/cohort?cohort_key=first_cohort` | ADMIN, PROFESSOR(owner), STUDENT(self) | Riesgo por cohorte desde JSON de notas (parcial + seguimiento + asistencia) |
+| GET | `/courses/{course_id}/grades-structure` | ADMIN, PROFESSOR(owner) | Consultar estructura JSON de notas del curso (desde enrollments) |
+| PUT | `/courses/{course_id}/grades-structure` | ADMIN, PROFESSOR(owner) | Guardar estructura JSON de notas del curso en enrollments |
 | GET | `/enrollments?student_id={id}` | ADMIN, PROFESSOR, STUDENT(self) | Matrículas por estudiante |
 
 ### Predicción de Riesgo (`/predict`)
@@ -444,6 +453,7 @@ Base path: `/api/v1`
 | Método | Path | Auth | Descripción |
 |---|---|---|---|
 | POST | `/predict` | Opcional (JWT) | Predecir riesgo académico. Si se pasa `student_id`, verifica consentimiento ML. |
+| POST | `/predict/cohort` | Opcional (JWT) | Predecir riesgo de un cohorte con parcial, seguimiento y asistencia. Si se pasa `student_id`, verifica consentimiento ML. |
 
 ### Health Check
 
@@ -479,11 +489,19 @@ Base path: `/api/v1`
 
 | Variable | Rango | Descripción |
 |---|---|---|
-| `promedio_asistencia` | 0–100 | Porcentaje de asistencia a clases |
-| `promedio_seguimiento` | 0–5 | Promedio de actividades de seguimiento |
-| `nota_parcial_1` | 0–5 | Nota del primer examen parcial |
-| `inicios_sesion_plataforma` | ≥0 | Número de inicios de sesión en el LMS |
-| `uso_tutorias` | 0–10 | Número de tutorías utilizadas |
+| `nota_corte_1` | 0–5 | Nota consolidada del primer cohorte |
+| `nota_corte_2` | 0–5 | Nota consolidada del segundo cohorte |
+| `nota_corte_final` | 0–5 | Nota consolidada del cohorte final |
+| `nota_total` | 0–5 | Nota final ponderada del curso |
+
+### Features de entrada (riesgo por cohorte)
+
+| Variable | Rango | Descripción |
+|---|---|---|
+| `cohort_key` | `first_cohort`\|`second_cohort`\|`third_cohort` | Cohorte evaluado |
+| `nota_parcial` | 0–5 | Nota del parcial del cohorte |
+| `promedio_seguimiento` | 0–5 | Promedio de actividades de seguimiento del cohorte |
+| `porcentaje_asistencia` | 0–100 | Asistencia del cohorte en porcentaje. Se calcula desde `attendance` (`assist` + `not_asist`) o formato legacy porcentual. Si no existe dato, la predicción por cohorte retorna `422`. |
 
 ### Salida del modelo
 
@@ -512,9 +530,11 @@ Base path: `/api/v1`
 | **Scaler** | `StandardScaler` — estandariza features antes de la predicción |
 | **Archivo modelo** | `ml_models/modelo_logistico.joblib` |
 | **Archivo scaler** | `ml_models/scaler.joblib` |
-| **Dataset de entrenamiento** | `datasets/dataset_estudiantes_decimal.csv` |
+| **Dataset de entrenamiento** | `datasets/dataset_estudiantes_decimal.csv` (opcional, fallback) |
 | **Carga** | Singleton — se carga una vez al iniciar el servicio |
-| **Fallback** | Si no existe el `.joblib`, entrena desde el CSV |
+| **Fuente primaria de datos** | Tabla `enrollments` (notas por cohorte + nota total) |
+| **Fallback de entrenamiento** | Si no existe `.joblib`, intenta entrenar desde BD; si no hay datos suficientes o BD no disponible, usa CSV si existe |
+| **Fallback de referencia (`datos_radar`)** | Promedios de aprobados desde BD; si no hay datos disponibles, usa valores defensivos |
 
 ---
 
@@ -542,7 +562,7 @@ Base path: `/api/v1`
 | `REFRESH_TOKEN_EXPIRE_DAYS` | Duración del refresh token | `7` |
 | `MODEL_PATH` | Ruta del modelo ML | `ml_models/modelo_logistico.joblib` |
 | `SCALER_PATH` | Ruta del scaler | `ml_models/scaler.joblib` |
-| `DATASET_PATH` | Ruta del dataset de entrenamiento | `datasets/dataset_estudiantes_decimal.csv` |
+| `DATASET_PATH` | Ruta de CSV opcional para fallback de entrenamiento/referencia ML | `datasets/dataset_estudiantes_decimal.csv` |
 | `UMBRAL_RIESGO_ALTO` | Umbral de riesgo alto | `0.7` |
 | `UMBRAL_RIESGO_MEDIO` | Umbral de riesgo medio | `0.4` |
 | `CORS_ORIGINS` | Orígenes permitidos en CORS | — |

@@ -13,6 +13,7 @@ from app.application.schemas.course import (
     CourseRead,
     CourseStatusUpdate,
     CourseUpdate,
+    EvaluationConfigUpdate,
 )
 from app.application.schemas.professor_course import ProfessorAssign, ProfessorAssignmentRead
 from app.application.schemas.user import PaginatedResponse, UserRead
@@ -47,13 +48,14 @@ def _get_professor_course_service(
     tags=["Secciones"],
 )
 async def list_courses(
-    status: CourseStatusEnum | None = None,
+    status: CourseStatusEnum | None = Query(None),
+    subject_id: UUID | None = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     current_user: CurrentUser = Depends(get_current_user),
     service: CourseService = Depends(_get_course_service),
 ) -> PaginatedResponse[CourseRead]:
-    return await service.list_courses(status, skip, limit)
+    return await service.list_courses(status, skip, limit, subject_id)
 
 
 @router.get(
@@ -106,6 +108,23 @@ async def update_course(
     service: CourseService = Depends(_get_course_service),
 ) -> CourseRead:
     return await service.update_course(course_id, body)
+
+
+@router.patch(
+    "/courses/{course_id}/evaluation-config",
+    response_model=CourseRead,
+    status_code=200,
+    summary="Guardar distribución de evaluación de una sección",
+    description="Persiste la configuración de cortes y componentes. Requiere rol PROFESSOR o ADMIN.",
+    tags=["Secciones"],
+)
+async def save_evaluation_config(
+    course_id: UUID,
+    body: EvaluationConfigUpdate,
+    current_user: CurrentUser = Depends(require_roles(RoleEnum.PROFESSOR, RoleEnum.ADMIN)),
+    service: CourseService = Depends(_get_course_service),
+) -> CourseRead:
+    return await service.save_evaluation_config(course_id, body, current_user)
 
 
 @router.patch(

@@ -29,12 +29,6 @@ class EnrollmentRead(BaseModel):
     status: EnrollmentStatusEnum
     enrollment_date: datetime
     updated_at: datetime
-    # Academic indicator fields (flat columns) — null until set by a professor
-    asistencia:      Decimal | None = None
-    seguimiento:     Decimal | None = None
-    nota_parcial_1:  Decimal | None = None
-    logins:          int     | None = None
-    uso_tutorias:    bool    | None = None
 
     model_config = {"from_attributes": True}
 
@@ -65,26 +59,16 @@ class GradesUpdate(BaseModel):
     )
 
 
-class IndicatorsUpdate(BaseModel):
-    """Indicadores planos que el docente registra por inscripción."""
-
-    asistencia:     float | None = Field(default=None, ge=0, le=100,  description="Porcentaje de asistencia (0–100)")
-    seguimiento:    float | None = Field(default=None, ge=0, le=5,    description="Nota de seguimiento (0.0–5.0)")
-    nota_parcial_1: float | None = Field(default=None, ge=0, le=5,    description="Nota parcial 1 (0.0–5.0)")
-    logins:         int   | None = Field(default=None, ge=0,           description="Número de logins en plataforma LMS")
-    uso_tutorias:   bool  | None = Field(default=None,                 description="Si el estudiante usó tutorías")
+class CourseGradesStructureRead(BaseModel):
+    course_id: UUID
+    grades: dict | None
 
 
 class RiskFromEnrollmentRequest(BaseModel):
-    """Datos adicionales que el estudiante provee para calcular su riesgo.
-    El sistema extrae automáticamente nota_parcial_1 y promedio_seguimiento de grades."""
+    """Payload alternativo para predicción manual por cohortes.
+    No se usa en el endpoint de riesgo por matrícula."""
 
-    promedio_asistencia: float = Field(
-        ..., ge=0, le=100, description="Porcentaje de asistencia (0–100)"
-    )
-    inicios_sesion_plataforma: int = Field(
-        ..., ge=0, description="Número de logins en la plataforma LMS"
-    )
-    uso_tutorias: int = Field(
-        ..., ge=0, le=10, description="Número de sesiones de tutoría utilizadas (0–10)"
-    )
+    nota_corte_1: float = Field(..., ge=0, le=5, description="Nota corte 1 (0–5)")
+    nota_corte_2: float = Field(..., ge=0, le=5, description="Nota corte 2 (0–5)")
+    nota_corte_final: float = Field(..., ge=0, le=5, description="Nota corte final (0–5)")
+    nota_total: float = Field(..., ge=0, le=5, description="Nota total ponderada (0–5)")

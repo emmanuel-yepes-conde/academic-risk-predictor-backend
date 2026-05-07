@@ -1,7 +1,7 @@
 """add_referrals_and_course_eval_config
 
-Revision ID: 0015
-Revises: 0014
+Revision ID: 0018
+Revises: 0017
 Create Date: 2026-05-04
 
 Cambios:
@@ -14,8 +14,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects.postgresql import JSONB
 
-revision: str = "0015"
-down_revision: Union[str, None] = "0014"
+revision: str = "0018"
+down_revision: Union[str, None] = "0017"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -24,18 +24,18 @@ def upgrade() -> None:
     # ── 1. Tabla referrals ───────────────────────────────────────────────────
     op.create_table(
         "referrals",
-        sa.Column("id",                    sa.UUID(),          nullable=False, primary_key=True),
-        sa.Column("enrollment_id",         sa.UUID(),          nullable=False),
-        sa.Column("created_by",            sa.UUID(),          nullable=False),
-        sa.Column("tipo_remision",         sa.VARCHAR(100),    nullable=False),
-        sa.Column("tipo_remision_otro",    sa.Text(),          nullable=True),
-        sa.Column("observaciones",         sa.Text(),          nullable=False),
-        sa.Column("observaciones_remision",sa.Text(),          nullable=True),
-        sa.Column("fecha_remision",        sa.Date(),          nullable=False),
-        sa.Column("asistio",               sa.VARCHAR(20),     nullable=False, server_default="Sin confirmar"),
-        sa.Column("status",                sa.VARCHAR(20),     nullable=False, server_default="PENDIENTE"),
-        sa.Column("created_at",            sa.DateTime(timezone=True), nullable=False),
-        sa.Column("updated_at",            sa.DateTime(timezone=True), nullable=False),
+        sa.Column("id",                     sa.UUID(),                  nullable=False, primary_key=True),
+        sa.Column("enrollment_id",          sa.UUID(),                  nullable=False),
+        sa.Column("created_by",             sa.UUID(),                  nullable=False),
+        sa.Column("tipo_remision",          sa.VARCHAR(100),            nullable=False),
+        sa.Column("tipo_remision_otro",     sa.Text(),                  nullable=True),
+        sa.Column("observaciones",          sa.Text(),                  nullable=False),
+        sa.Column("observaciones_remision", sa.Text(),                  nullable=True),
+        sa.Column("fecha_remision",         sa.Date(),                  nullable=False),
+        sa.Column("asistio",                sa.VARCHAR(20),             nullable=False, server_default="Sin confirmar"),
+        sa.Column("status",                 sa.VARCHAR(20),             nullable=False, server_default="PENDIENTE"),
+        sa.Column("created_at",             sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at",             sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(["enrollment_id"], ["enrollments.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["created_by"],    ["users.id"],       ondelete="RESTRICT"),
     )

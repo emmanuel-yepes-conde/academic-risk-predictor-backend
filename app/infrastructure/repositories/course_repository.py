@@ -9,7 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.schemas.audit_log import AuditLogCreate
-from app.application.schemas.course import CourseRead, CourseUpdate
+from app.application.schemas.course import CourseRead, CourseUpdate, EvaluationConfigUpdate
 from app.domain.enums import CourseStatusEnum, OperationEnum
 from app.domain.interfaces.course_repository import ICourseRepository
 from app.infrastructure.models.course import Course
@@ -33,6 +33,7 @@ def _to_read(course: Course, subject: Subject) -> CourseRead:
         name=subject.name,
         credits=subject.credits,
         program_id=subject.program_id,
+        evaluation_config=course.evaluation_config,
     )
 
 
@@ -89,19 +90,31 @@ class CourseRepository(ICourseRepository):
         return [_to_read(c, s) for c, s in result.all()]
 
     async def list_all(
-        self, skip: int, limit: int, status: CourseStatusEnum | None = None
+        self,
+        skip: int,
+        limit: int,
+        status: CourseStatusEnum | None = None,
+        subject_id: UUID | None = None,
     ) -> list[CourseRead]:
         stmt = _base_joined_stmt()
         if status is not None:
             stmt = stmt.where(Course.status == status)
+        if subject_id is not None:
+            stmt = stmt.where(Course.subject_id == subject_id)
         stmt = stmt.offset(skip).limit(limit)
         result = await self._session.execute(stmt)
         return [_to_read(c, s) for c, s in result.all()]
 
-    async def count_all(self, status: CourseStatusEnum | None = None) -> int:
+    async def count_all(
+        self,
+        status: CourseStatusEnum | None = None,
+        subject_id: UUID | None = None,
+    ) -> int:
         stmt = select(func.count()).select_from(Course)
         if status is not None:
             stmt = stmt.where(Course.status == status)
+        if subject_id is not None:
+            stmt = stmt.where(Course.subject_id == subject_id)
         result = await self._session.execute(stmt)
         return result.scalar_one()
 
@@ -150,6 +163,20 @@ class CourseRepository(ICourseRepository):
             previous_data={"status": previous_status},
             new_data={"status": status},
         ))
+        return await self.get_by_id(course_id)
+
+    async def save_evaluation_config(
+        self, course_id: UUID, config: dict
+    ) -> CourseRead | None:
+        result = await self._session.execute(
+            select(Course).where(Course.id == course_id)
+        )
+        course = result.scalar_one_or_none()
+        if course is None:
+            return None
+        course.evaluation_config = config
+        self._session.add(course)
+        await self._session.flush()
         return await self.get_by_id(course_id)
 
     async def list_enrolled_students(self, course_id: UUID) -> list[User]:
