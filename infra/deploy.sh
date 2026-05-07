@@ -216,7 +216,7 @@ deploy() {
     # -----------------------------------------------------------------------
     # Paso 1: Crear Resource Group
     # -----------------------------------------------------------------------
-    log_info "Paso 1/5: Creando Resource Group '${rg_name}' en '${REGION}'..."
+    log_info "Paso 1/6: Creando Resource Group '${rg_name}' en '${REGION}'..."
     if ! az group create --name "${rg_name}" --location "${REGION}" --output none; then
         log_error "No se pudo crear el Resource Group '${rg_name}'."
         log_error "Verifica que la región '${REGION}' es válida y que tienes permisos suficientes."
@@ -266,37 +266,76 @@ deploy() {
     log_info "  PostgreSQL Host:   ${postgres_host}"
 
     # -----------------------------------------------------------------------
-    # Paso 4: Crear o actualizar Container App via CLI
-    # (Separado del Bicep para evitar timeouts de aprovisionamiento)
+    # Paso 4: Construir imagen Docker en ACR (antes de crear el Container App)
     # -----------------------------------------------------------------------
-    log_info "Paso 4/6: Configurando Container App '${ca_name}'..."
+    log_info "Paso 4/6: Construyendo imagen Docker en ACR '${acr_name}'..."
+    if ! az acr build \
+        --registry "${acr_name}" \
+        --image mpra-backend:latest \
+        --file "${SCRIPT_DIR}/../Dockerfile" \
+        "${SCRIPT_DIR}/.." 2>&1; then
+        log_error "Falló la construcción de la imagen Docker en ACR."
+        exit 1
+    fi
+    log_success "Imagen Docker 'mpra-backend:latest' construida y publicada en ACR."
 
-    local database_url="postgresql+asyncpg://mpraadmin:${DB_PASSWORD}@${postgres_host}:5432/mpra_db?sslmode=require"
+    # -----------------------------------------------------------------------
+    # Paso 5: Obtener credenciales admin del ACR
+    # -----------------------------------------------------------------------
+    log_info "Paso 5/6: Obteniendo credenciales admin del ACR..."
+    local acr_user acr_pass
+    acr_user=$(az acr credential show --name "${acr_name}" --query 'username' -o tsv)
+    acr_pass=$(az acr credential show --name "${acr_name}" --query 'passwords[0].value' -o tsv)
+
+    if [[ -z "${acr_user}" || -z "${acr_pass}" ]]; then
+        log_error "No se pudieron obtener las credenciales admin del ACR."
+        exit 1
+    fi
+    log_success "Credenciales admin del ACR obtenidas."
+
+    # -----------------------------------------------------------------------
+    # Paso 6: Crear o actualizar Container App con la imagen MPRA real
+    # -----------------------------------------------------------------------
+    log_info "Paso 6/6: Configurando Container App '${ca_name}' con imagen MPRA..."
+
+    local db_password_encoded
+    db_password_encoded=$(printf '%s' "${DB_PASSWORD}" | python3 -c "import sys,urllib.parse; print(urllib.parse.quote(sys.stdin.read(), safe=''))")
+    local database_url="postgresql+asyncpg://mpraadmin:${db_password_encoded}@${postgres_host}:5432/mpra_db?ssl=require"
+    local image_full="${acr_login_server}/mpra-backend:latest"
 
     if az containerapp show --name "${ca_name}" --resource-group "${rg_name}" --output none 2>/dev/null; then
-        log_info "Container App '${ca_name}' ya existe, actualizando secrets y env vars..."
+        log_info "Container App '${ca_name}' ya existe, actualizando..."
+        az containerapp registry set \
+            --name "${ca_name}" \
+            --resource-group "${rg_name}" \
+            --server "${acr_login_server}" \
+            --username "${acr_user}" \
+            --password "${acr_pass}" \
+            --output none
         az containerapp secret set \
             --name "${ca_name}" \
             --resource-group "${rg_name}" \
             --secrets "database-url=${database_url}" "jwt-secret-key=${JWT_SECRET}" \
             --output none
-        # Eliminar CORS_ORIGINS si existe (causaba error de parsing en pydantic-settings)
         az containerapp update \
             --name "${ca_name}" \
             --resource-group "${rg_name}" \
-            --remove-env-vars CORS_ORIGINS \
-            --output none 2>/dev/null || true
+            --image "${image_full}" \
+            --output none
     else
-        log_info "Creando Container App '${ca_name}'..."
+        log_info "Creando Container App '${ca_name}' con imagen MPRA..."
         az containerapp create \
             --name "${ca_name}" \
             --resource-group "${rg_name}" \
             --environment "${cae_name}" \
-            --image "mcr.microsoft.com/azuredocs/containerapps-helloworld:latest" \
+            --image "${image_full}" \
+            --registry-server "${acr_login_server}" \
+            --registry-username "${acr_user}" \
+            --registry-password "${acr_pass}" \
             --target-port 8000 \
             --ingress external \
-            --min-replicas 0 \
-            --max-replicas 1 \
+            --min-replicas 1 \
+            --max-replicas 2 \
             --cpu 0.5 \
             --memory "1Gi" \
             --secrets "database-url=${database_url}" "jwt-secret-key=${JWT_SECRET}" \
@@ -309,34 +348,8 @@ deploy() {
                 "MODEL_PATH=ml_models/modelo_logistico.joblib" \
                 "SCALER_PATH=ml_models/scaler.joblib" \
                 "DATASET_PATH=datasets/dataset_estudiantes_decimal.csv" \
-            --system-assigned \
             --output none
     fi
-
-    # Asignar rol AcrPull a la identidad del Container App
-    local ca_principal_id acr_id
-    ca_principal_id=$(az containerapp show \
-        --name "${ca_name}" \
-        --resource-group "${rg_name}" \
-        --query 'identity.principalId' -o tsv)
-    acr_id=$(az acr show \
-        --name "${acr_name}" \
-        --resource-group "${rg_name}" \
-        --query 'id' -o tsv)
-
-    az role assignment create \
-        --assignee "${ca_principal_id}" \
-        --role "AcrPull" \
-        --scope "${acr_id}" \
-        --output none 2>/dev/null || log_warn "La asignación AcrPull ya existe (esto es normal en re-despliegues)."
-
-    # Vincular el ACR al Container App usando identidad administrada
-    az containerapp registry set \
-        --name "${ca_name}" \
-        --resource-group "${rg_name}" \
-        --server "${acr_login_server}" \
-        --identity system \
-        --output none
 
     local fqdn
     fqdn=$(az containerapp show \
@@ -344,35 +357,7 @@ deploy() {
         --resource-group "${rg_name}" \
         --query 'properties.configuration.ingress.fqdn' -o tsv)
 
-    log_success "Container App '${ca_name}' configurado. URL: https://${fqdn}"
-
-    # -----------------------------------------------------------------------
-    # Paso 5: Construir imagen Docker en ACR
-    # -----------------------------------------------------------------------
-    log_info "Paso 5/6: Construyendo imagen Docker en ACR '${acr_name}'..."
-    if ! az acr build \
-        --registry "${acr_name}" \
-        --image mpra-backend:latest \
-        --file "${SCRIPT_DIR}/../Dockerfile" \
-        "${SCRIPT_DIR}/.." 2>&1; then
-        log_error "Falló la construcción de la imagen Docker en ACR."
-        exit 1
-    fi
-    log_success "Imagen Docker 'mpra-backend:latest' construida y publicada en ACR."
-
-    # -----------------------------------------------------------------------
-    # Paso 6: Actualizar Container App con la imagen real
-    # -----------------------------------------------------------------------
-    log_info "Paso 6/6: Actualizando Container App '${ca_name}' con la imagen nueva..."
-    if ! az containerapp update \
-        --name "${ca_name}" \
-        --resource-group "${rg_name}" \
-        --image "${acr_login_server}/mpra-backend:latest" \
-        --output none 2>&1; then
-        log_error "Falló la actualización del Container App '${ca_name}'."
-        exit 1
-    fi
-    log_success "Container App '${ca_name}' actualizado con la imagen nueva."
+    log_success "Container App '${ca_name}' desplegado. URL: https://${fqdn}"
     log_info "Las migraciones Alembic se ejecutan automáticamente al arrancar el contenedor."
 
     # -----------------------------------------------------------------------
@@ -391,7 +376,7 @@ deploy() {
     echo -e "  ${BLUE}Health check:${NC}       https://${fqdn}/health"
     echo ""
     echo -e "  ${BLUE}PostgreSQL Host:${NC}    ${postgres_host}"
-    echo -e "  ${BLUE}Cadena de conexión:${NC} postgresql+asyncpg://mpraadmin:****@${postgres_host}:5432/mpra_db?sslmode=require"
+    echo -e "  ${BLUE}Cadena de conexión:${NC} postgresql+asyncpg://mpraadmin:****@${postgres_host}:5432/mpra_db?ssl=require"
     echo ""
     echo -e "  ${BLUE}ACR:${NC}                ${acr_login_server}"
     echo -e "  ${BLUE}Container App:${NC}      ${ca_name}"
