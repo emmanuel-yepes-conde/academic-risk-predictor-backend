@@ -121,6 +121,16 @@ class EnrollmentRepository(IEnrollmentRepository):
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
+    async def list_by_course(
+        self, course_id: UUID, status: EnrollmentStatusEnum | None = None
+    ) -> list[Enrollment]:
+        """SELECT enrollments for a course with optional status filter."""
+        stmt = select(Enrollment).where(Enrollment.course_id == course_id)
+        if status is not None:
+            stmt = stmt.where(Enrollment.status == status)
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
     async def update_grades(
         self,
         enrollment_id: UUID,

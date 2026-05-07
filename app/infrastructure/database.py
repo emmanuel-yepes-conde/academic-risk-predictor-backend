@@ -18,6 +18,7 @@ engine = create_async_engine(
     pool_size=settings.DB_POOL_MIN,
     max_overflow=settings.DB_POOL_MAX - settings.DB_POOL_MIN,
     echo=settings.DB_ECHO,
+    pool_recycle=1800,  # recicla conexiones cada 30 min, evita conexiones stale
 )
 
 AsyncSessionFactory = async_sessionmaker(engine, expire_on_commit=False)
