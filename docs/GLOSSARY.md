@@ -262,6 +262,7 @@ Los schemas Pydantic viven en `app/application/schemas/`. Son los contratos de e
 | `EnrollmentRead` | `id`, `student_id`, `course_id`, `status`, `enrollment_date`, `updated_at` | Leer matrícula |
 | `GradesRead` | `id`, `student_id`, `course_id`, `grades`, `first_cohort_grade`, `second_cohort_grade`, `third_cohort_grade`, `final_grade` | Leer notas |
 | `GradesUpdate` | `grades: dict` | Registrar/actualizar notas |
+| `IndicatorsUpdate` | `asistencia` (0–100), `seguimiento` (0–5), `nota_parcial_1` (0–5), `logins`, `uso_tutorias` | Actualizar indicadores planos por el docente (`PATCH /indicators`) |
 | `CourseGradesStructureRead` | `course_id`, `grades` | Leer estructura JSON de notas a nivel curso (desde enrollments) |
 | `RiskFromEnrollmentRequest` | `nota_corte_1`, `nota_corte_2`, `nota_corte_final`, `nota_total` | Predicción manual por cohortes (payload alternativo) |
 
