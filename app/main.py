@@ -47,12 +47,14 @@ app = FastAPI(
     version=settings.API_VERSION,
     docs_url="/docs",
     redoc_url="/redoc",
+    servers=settings.get_openapi_servers(),
     lifespan=lifespan,
 )
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
+    allow_origin_regex=settings.CORS_ORIGIN_REGEX,
     allow_credentials=settings.CORS_ALLOW_CREDENTIALS,
     allow_methods=settings.CORS_ALLOW_METHODS,
     allow_headers=settings.CORS_ALLOW_HEADERS,
@@ -100,5 +102,6 @@ async def root():
     return {
         "mensaje": "API de Predicción de Riesgo Académico",
         "version": settings.API_VERSION,
+        "base_url": settings.get_public_base_url(),
         "documentacion": {"swagger": "/docs", "redoc": "/redoc"},
     }

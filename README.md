@@ -33,8 +33,17 @@ Edita `.env` con los siguientes valores. **Solo cambia lo marcado con ⚠️** s
 
 ```env
 # Servidor
-HOST=0.0.0.0
+HOST=localhost
 PORT=8001                          # ⚠️ El frontend espera puerto 8001
+
+# Producción / Vercel
+# Guarda el DNS del backend de Azure en Vercel como la URL base del frontend:
+# NEXT_PUBLIC_API_BASE_URL=https://<dns-de-azure>
+# o VITE_API_BASE_URL=https://<dns-de-azure>
+AZURE_BACKEND_DNS=<dns-de-azure>    # opcional en backend; se normaliza a https://
+PUBLIC_BACKEND_URL=https://<dns-de-azure>
+CORS_ORIGINS=http://localhost:3000,http://localhost:4321,http://localhost:5173
+CORS_ORIGIN_REGEX=https://.*\.vercel\.app
 
 # Base de datos — Docker (no cambiar si usas docker-compose)
 POSTGRES_USER=mpra_user
@@ -161,7 +170,7 @@ Además, exporta/regenera `datasets/dataset_estudiantes_decimal.csv` para reentr
 
 ```bash
 source venv/bin/activate
-python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+python3 -m uvicorn app.main:app --host localhost --port 8001 --reload
 ```
 
 El servidor quedará disponible en:
@@ -169,6 +178,19 @@ El servidor quedará disponible en:
 - Swagger UI: http://localhost:8001/docs
 - ReDoc: http://localhost:8001/redoc
 - Health check: http://localhost:8001/health
+
+---
+
+## Conectar frontend en Vercel
+
+1. Despliega el backend en Azure con `./infra/deploy.sh`. Al final el script imprime la URL pública, por ejemplo `https://ca-mpra-prod.example.azurecontainerapps.io`.
+2. En Vercel, entra al proyecto frontend y agrega una variable de entorno:
+   - Next.js: `NEXT_PUBLIC_API_BASE_URL=https://<dns-de-azure>`
+   - Vite: `VITE_API_BASE_URL=https://<dns-de-azure>`
+3. Redeploy del frontend en Vercel para que la variable quede embebida en el build.
+4. Si usas dominio propio en Vercel, agrega ese origen exacto en el backend con `CORS_ORIGINS=https://tu-dominio.com,http://localhost:3000`. Los dominios `*.vercel.app` ya quedan cubiertos con `CORS_ORIGIN_REGEX`.
+
+La API mantiene `/api/v1` como prefijo para endpoints de negocio, así que el frontend debería construir URLs como `${API_BASE_URL}/api/v1/auth/login`.
 
 ---
 

@@ -344,6 +344,8 @@ deploy() {
                 "JWT_SECRET_KEY=secretref:jwt-secret-key" \
                 "HOST=0.0.0.0" \
                 "PORT=8000" \
+                "CORS_ORIGINS=http://localhost:3000,http://localhost:4321,http://localhost:5173" \
+                "CORS_ORIGIN_REGEX=https://.*\.vercel\.app" \
                 "LOG_LEVEL=info" \
                 "MODEL_PATH=ml_models/modelo_logistico.joblib" \
                 "SCALER_PATH=ml_models/scaler.joblib" \
@@ -356,6 +358,17 @@ deploy() {
         --name "${ca_name}" \
         --resource-group "${rg_name}" \
         --query 'properties.configuration.ingress.fqdn' -o tsv)
+
+    log_info "Registrando URL pública del backend en variables del Container App..."
+    az containerapp update \
+        --name "${ca_name}" \
+        --resource-group "${rg_name}" \
+        --set-env-vars \
+            "AZURE_BACKEND_DNS=${fqdn}" \
+            "PUBLIC_BACKEND_URL=https://${fqdn}" \
+            "CORS_ORIGINS=http://localhost:3000,http://localhost:4321,http://localhost:5173" \
+            "CORS_ORIGIN_REGEX=https://.*\.vercel\.app" \
+        --output none
 
     log_success "Container App '${ca_name}' desplegado. URL: https://${fqdn}"
     log_info "Las migraciones Alembic se ejecutan automáticamente al arrancar el contenedor."
@@ -374,6 +387,9 @@ deploy() {
     echo ""
     echo -e "  ${BLUE}URL pública:${NC}        https://${fqdn}"
     echo -e "  ${BLUE}Health check:${NC}       https://${fqdn}/health"
+    echo -e "  ${BLUE}CORS Vercel:${NC}        https://*.vercel.app"
+    echo -e "  ${BLUE}Vercel env:${NC}         NEXT_PUBLIC_API_BASE_URL=https://${fqdn}"
+    echo -e "  ${BLUE}Vercel env:${NC}         VITE_API_BASE_URL=https://${fqdn}"
     echo ""
     echo -e "  ${BLUE}PostgreSQL Host:${NC}    ${postgres_host}"
     echo -e "  ${BLUE}Cadena de conexión:${NC} postgresql+asyncpg://mpraadmin:****@${postgres_host}:5432/mpra_db?ssl=require"
