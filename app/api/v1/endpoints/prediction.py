@@ -21,13 +21,13 @@ from app.schemas.student import (
     PredictionOutput,
     StudentInput,
 )
-from app.services.ml_service import AcademicRiskService, risk_service
+from app.services.ml_service import AcademicRiskService, get_risk_service
 
 router = APIRouter()
 
 
 def get_ml_service() -> AcademicRiskService:
-    return risk_service
+    return get_risk_service()
 
 
 def get_ml_application_service(

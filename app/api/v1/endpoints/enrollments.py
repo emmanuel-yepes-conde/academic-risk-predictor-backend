@@ -43,7 +43,7 @@ from app.infrastructure.repositories.consent_repository import ConsentRepository
 from app.infrastructure.repositories.enrollment_repository import EnrollmentRepository
 from app.infrastructure.models.student_profile import StudentProfile
 from app.schemas.student import CohortRiskOutput, PredictionOutput
-from app.services.ml_service import AcademicRiskService, risk_service
+from app.services.ml_service import AcademicRiskService, get_risk_service
 
 
 class StudentProfileRead(BaseModel):
@@ -75,7 +75,7 @@ def _get_grade_service(
 
 
 def _get_ml_service() -> AcademicRiskService:
-    return risk_service
+    return get_risk_service()
 
 
 def _get_ml_app_service(
