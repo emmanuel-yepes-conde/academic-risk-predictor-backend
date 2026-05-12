@@ -143,10 +143,13 @@ El Container App se configura con las siguientes variables de entorno. Los valor
 
 | Variable | Valor por defecto | Tipo | Descripción |
 |----------|-------------------|------|-------------|
-| `HOST` | `0.0.0.0` | Configuración | Host de escucha del servidor |
+| `HOST` | `localhost` | Configuración | Host de escucha del servidor. En contenedores se sobreescribe a `0.0.0.0` |
 | `PORT` | `8000` | Configuración | Puerto de escucha del servidor |
+| `AZURE_BACKEND_DNS` | — | Configuración | DNS público del backend en Azure Container Apps |
+| `PUBLIC_BACKEND_URL` | — | Configuración | URL pública del backend (`https://{AZURE_BACKEND_DNS}`) para OpenAPI/root y clientes externos |
 | `LOG_LEVEL` | `info` | Configuración | Nivel de logging (`debug`, `info`, `warning`, `error`) |
 | `CORS_ORIGINS` | `*` | Configuración | Orígenes permitidos para CORS (separados por coma) |
+| `CORS_ORIGIN_REGEX` | — | Configuración | Regex opcional para orígenes dinámicos; el despliegue usa `https://.*\.vercel\.app` para previews de Vercel |
 | `MODEL_PATH` | `ml_models/modelo_logistico.joblib` | Configuración | Ruta al archivo del modelo ML |
 | `SCALER_PATH` | `ml_models/scaler.joblib` | Configuración | Ruta al archivo del scaler |
 | `DATASET_PATH` | `datasets/dataset_estudiantes_decimal.csv` | Configuración | Ruta al dataset de entrenamiento |
@@ -154,6 +157,8 @@ El Container App se configura con las siguientes variables de entorno. Los valor
 | `JWT_SECRET_KEY` | *(proporcionada en despliegue)* | Secreto | Clave secreta para firmar tokens JWT |
 
 > **Secretos:** `DATABASE_URL` y `JWT_SECRET_KEY` se almacenan como secretos del Container App y nunca se exponen en logs ni outputs. La `DATABASE_URL` se construye automáticamente con el formato `postgresql+asyncpg://{user}:{pass}@{host}:5432/mpra_db?sslmode=require`.
+
+> **Vercel:** guarda la URL pública del backend de Azure en el proyecto frontend como `NEXT_PUBLIC_API_BASE_URL=https://<dns-de-azure>` o `VITE_API_BASE_URL=https://<dns-de-azure>`, según el framework usado. El script deja habilitados los orígenes `https://*.vercel.app`; para un dominio propio, agrega ese dominio exacto en `CORS_ORIGINS`.
 
 ## Limpieza de recursos
 

@@ -15,7 +15,6 @@ from app.application.schemas.enrollment import (
     EnrollmentRead,
     EnrollmentStatusUpdate,
     EnrollmentUpdate,
-    IndicatorsUpdate,
 )
 from app.domain.enums import CourseStatusEnum, EnrollmentStatusEnum, RoleEnum
 from app.domain.interfaces.enrollment_repository import IEnrollmentRepository
@@ -186,40 +185,6 @@ class EnrollmentService:
                 detail="Inscripción no encontrada",
             )
         return EnrollmentRead.model_validate(enrollment)
-
-    async def update_indicators(
-        self,
-        enrollment_id: UUID,
-        body: IndicatorsUpdate,
-        current_user: object,
-    ) -> EnrollmentRead:
-        """
-        Actualiza los indicadores planos de una inscripción.
-        PROFESSOR: solo puede actualizar inscripciones en sus cursos.
-        ADMIN: acceso total.
-        """
-        enrollment = await self._repo.get_by_id(enrollment_id)
-        if enrollment is None:
-            raise HTTPException(status_code=404, detail="Inscripción no encontrada")
-
-        # Authorization: professors can only touch their own courses
-        if current_user.role == RoleEnum.PROFESSOR:
-            result = await self._session.execute(
-                select(Course).where(Course.id == enrollment.course_id)
-            )
-            course = result.scalar_one_or_none()
-            if course is None or course.professor_id != current_user.id:
-                raise HTTPException(status_code=403, detail="No tiene permisos para esta inscripción")
-        elif current_user.role != RoleEnum.ADMIN:
-            raise HTTPException(status_code=403, detail="Solo profesores y administradores pueden actualizar indicadores")
-
-        # Only include fields explicitly provided in the payload (exclude_unset)
-        # Use model_dump(exclude_unset=True) so that missing fields aren't overwritten.
-        # None values ARE allowed (to clear a field) — only truly absent keys are dropped.
-        fields = body.model_dump(exclude_unset=True)
-
-        updated = await self._repo.update_indicators(enrollment_id, fields, current_user.id)
-        return EnrollmentRead.model_validate(updated)
 
     async def list_student_enrollments(
         self,

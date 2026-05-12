@@ -36,6 +36,18 @@ def parse_cors_origins(v):
     return v
 
 
+def normalize_public_url(value: str | None) -> str | None:
+    """Normaliza una URL pública aceptando DNS sin esquema."""
+    if value is None:
+        return None
+    normalized = str(value).strip().rstrip("/")
+    if not normalized:
+        return None
+    if "://" not in normalized:
+        normalized = f"https://{normalized}"
+    return normalized
+
+
 class Settings(BaseSettings):
     """
     Configuración de la aplicación usando Pydantic BaseSettings
@@ -48,13 +60,25 @@ class Settings(BaseSettings):
     API_VERSION: str = "1.0.0"
     
     # Configuración del servidor
-    HOST: str = Field(default="0.0.0.0", description="Host del servidor")
+    HOST: str = Field(default="localhost", description="Host del servidor")
     PORT: int = Field(default=8000, description="Puerto del servidor")
+    AZURE_BACKEND_DNS: Optional[str] = Field(
+        default=None,
+        description="DNS público del backend en Azure Container Apps"
+    )
+    PUBLIC_BACKEND_URL: Optional[str] = Field(
+        default=None,
+        description="URL pública del backend consumida por clientes externos"
+    )
     
     # Configuración CORS - Usa BeforeValidator para permitir string o lista
     CORS_ORIGINS: Annotated[List[str], BeforeValidator(parse_cors_origins)] = Field(
         default=["*"],
         description="Orígenes permitidos para CORS"
+    )
+    CORS_ORIGIN_REGEX: Optional[str] = Field(
+        default=None,
+        description="Expresión regular opcional para orígenes CORS dinámicos"
     )
     CORS_ALLOW_CREDENTIALS: bool = False
     CORS_ALLOW_METHODS: List[str] = ["*"]
@@ -116,8 +140,15 @@ class Settings(BaseSettings):
 
     @model_validator(mode='before')
     @classmethod
-    def build_database_url(cls, values: dict) -> dict:
+    def build_derived_settings(cls, values: dict) -> dict:
         """Construye DATABASE_URL automáticamente si no está definida en el entorno."""
+        public_url = values.get("PUBLIC_BACKEND_URL")
+        azure_dns = values.get("AZURE_BACKEND_DNS")
+        if public_url:
+            values["PUBLIC_BACKEND_URL"] = normalize_public_url(public_url)
+        elif azure_dns:
+            values["PUBLIC_BACKEND_URL"] = normalize_public_url(azure_dns)
+
         if not values.get("DATABASE_URL"):
             user = values.get("DB_USER", "mpra_user")
             password = values.get("DB_PASSWORD", "mpra_secret")
@@ -141,6 +172,24 @@ class Settings(BaseSettings):
     def get_base_path(self) -> str:
         """Retorna el path base del proyecto"""
         return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+    def get_local_base_url(self) -> str:
+        """Retorna la URL local navegable aun si el servidor escucha en 0.0.0.0."""
+        host = "localhost" if self.HOST in {"0.0.0.0", "::"} else self.HOST
+        return f"http://{host}:{self.PORT}"
+
+    def get_public_base_url(self) -> str:
+        """Retorna la URL pública si existe; en local cae a localhost."""
+        return self.PUBLIC_BACKEND_URL or self.get_local_base_url()
+
+    def get_openapi_servers(self) -> list[dict[str, str]]:
+        """Servidores visibles en Swagger/OpenAPI."""
+        servers = [
+            {"url": self.get_local_base_url(), "description": "Local"},
+        ]
+        if self.PUBLIC_BACKEND_URL:
+            servers.insert(0, {"url": self.PUBLIC_BACKEND_URL, "description": "Azure"})
+        return servers
     
     def get_full_model_path(self) -> str:
         """Retorna la ruta completa al modelo"""
@@ -157,4 +206,3 @@ class Settings(BaseSettings):
 
 # Instancia global de configuración
 settings = Settings()
-

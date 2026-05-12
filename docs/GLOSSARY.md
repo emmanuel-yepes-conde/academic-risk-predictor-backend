@@ -145,6 +145,8 @@ Matrícula de un estudiante en un `Course`. Contiene notas.
 | `final_grade` | Decimal(3,2) \| None | Nota definitiva |
 | — | Constraint | Único: `(student_id, course_id)` |
 
+> Los indicadores planos (`asistencia`, `seguimiento`, `nota_parcial_1`, `logins`, `uso_tutorias`) fueron retirados de `Enrollment`; las notas y variables académicas se gestionan desde `grades` y los datos de asistencia por cohorte.
+
 **Estructura del campo `grades` (JSONB):**
 ```json
 {
@@ -304,7 +306,7 @@ Ubicados en `app/application/services/`. Orquestan lógica de negocio, no accede
 | Servicio | Responsabilidad principal |
 |---|---|
 | `AuthService` | Login con credenciales, refresh de tokens |
-| `UserService` | CRUD de usuarios con paginación y filtros |
+| `UserService` | CRUD de usuarios con paginación y filtros; ejecuta consultas de listado/conteo en secuencia sobre una misma sesión async |
 | `TokenService` | Crear y decodificar JWT (access + refresh) |
 | `CourseService` | CRUD de secciones de cursos + guardado de `evaluation_config` |
 | `EnrollmentService` | Matricular/desmatricular estudiantes; lógica de reactivación |
@@ -439,14 +441,14 @@ Base path: `/api/v1`
 |---|---|---|---|
 | POST | `/enrollments` | ADMIN | Matricular estudiante |
 | GET | `/enrollments/{enrollment_id}` | ADMIN, PROFESSOR, STUDENT(self) | Obtener matrícula |
-| PATCH | `/enrollments/{enrollment_id}/course` | ADMIN | Cambiar curso |
+| PATCH | `/enrollments/{enrollment_id}` | ADMIN | Cambiar curso |
 | PATCH | `/enrollments/{enrollment_id}/status` | ADMIN | Cambiar estado |
 | GET | `/enrollments/{enrollment_id}/grades` | ADMIN, PROFESSOR, STUDENT(self) | Ver notas |
 | PUT | `/enrollments/{enrollment_id}/grades` | ADMIN, PROFESSOR | Registrar notas |
 | POST | `/enrollments/{enrollment_id}/risk/cohort?cohort_key=first_cohort` | ADMIN, PROFESSOR(owner), STUDENT(self) | Riesgo por cohorte desde JSON de notas (parcial + seguimiento + asistencia) |
 | GET | `/courses/{course_id}/grades-structure` | ADMIN, PROFESSOR(owner) | Consultar estructura JSON de notas del curso (desde enrollments) |
 | PUT | `/courses/{course_id}/grades-structure` | ADMIN, PROFESSOR(owner) | Guardar estructura JSON de notas del curso en enrollments |
-| GET | `/enrollments?student_id={id}` | ADMIN, PROFESSOR, STUDENT(self) | Matrículas por estudiante |
+| GET | `/students/{student_id}/enrollments` | ADMIN, PROFESSOR, STUDENT(self) | Matrículas por estudiante |
 
 ### Predicción de Riesgo (`/predict`)
 
@@ -555,17 +557,22 @@ Base path: `/api/v1`
 
 | Variable | Descripción | Default |
 |---|---|---|
+| `HOST` | Host de escucha local del servidor. En contenedores/Azure se sobreescribe a `0.0.0.0`. | `localhost` |
+| `PORT` | Puerto de escucha del servidor. | `8000` |
+| `AZURE_BACKEND_DNS` | DNS público del backend desplegado en Azure Container Apps. Si no incluye esquema, se normaliza como HTTPS. | — |
+| `PUBLIC_BACKEND_URL` | URL pública del backend usada en respuesta raíz y servidores OpenAPI; si no se define y existe `AZURE_BACKEND_DNS`, se deriva de este. | — |
 | `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT`, `DB_NAME` | Conexión a PostgreSQL | — |
 | `JWT_SECRET_KEY` | Clave para firmar JWT. **Requerida.** | — |
 | `JWT_ALGORITHM` | Algoritmo JWT | `HS256` |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | Duración del access token | `30` |
 | `REFRESH_TOKEN_EXPIRE_DAYS` | Duración del refresh token | `7` |
+| `CORS_ORIGINS` | Orígenes permitidos en CORS | — |
+| `CORS_ORIGIN_REGEX` | Expresión regular opcional para permitir orígenes dinámicos, útil para previews de Vercel como `https://.*\.vercel\.app`. | — |
 | `MODEL_PATH` | Ruta del modelo ML | `ml_models/modelo_logistico.joblib` |
 | `SCALER_PATH` | Ruta del scaler | `ml_models/scaler.joblib` |
 | `DATASET_PATH` | Ruta de CSV opcional para fallback de entrenamiento/referencia ML | `datasets/dataset_estudiantes_decimal.csv` |
 | `UMBRAL_RIESGO_ALTO` | Umbral de riesgo alto | `0.7` |
 | `UMBRAL_RIESGO_MEDIO` | Umbral de riesgo medio | `0.4` |
-| `CORS_ORIGINS` | Orígenes permitidos en CORS | — |
 
 ### Stack tecnológico
 
