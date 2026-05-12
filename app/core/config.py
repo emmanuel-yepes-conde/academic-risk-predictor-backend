@@ -5,9 +5,9 @@ Centraliza todas las configuraciones y variables de entorno
 
 import os
 import uuid
-from typing import List, Union, Annotated, Optional
+from typing import List, Optional
 from pydantic_settings import BaseSettings
-from pydantic import Field, BeforeValidator, model_validator
+from pydantic import Field, model_validator
 
 
 def parse_cors_origins(v):
@@ -71,10 +71,12 @@ class Settings(BaseSettings):
         description="URL pública del backend consumida por clientes externos"
     )
     
-    # Configuración CORS - Usa BeforeValidator para permitir string o lista
-    CORS_ORIGINS: Annotated[List[str], BeforeValidator(parse_cors_origins)] = Field(
-        default=["*"],
-        description="Orígenes permitidos para CORS"
+    # Configuración CORS - Se almacena como str para evitar que pydantic-settings
+    # intente parsearlo como JSON antes de la validación. El parseo se hace en
+    # main.py vía parse_cors_origins().
+    CORS_ORIGINS: str = Field(
+        default="*",
+        description="Orígenes permitidos para CORS (separados por coma)"
     )
     CORS_ORIGIN_REGEX: Optional[str] = Field(
         default=None,
