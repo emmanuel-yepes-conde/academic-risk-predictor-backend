@@ -21,6 +21,7 @@ from app.application.schemas.user import UserCreate
 from app.domain.enums import RoleEnum
 from app.infrastructure.models.consent import Consent
 from app.infrastructure.models.course import Course
+from app.infrastructure.models.subject import Subject
 from app.infrastructure.models.user import User
 from app.infrastructure.repositories.consent_repository import ConsentRepository
 from app.infrastructure.repositories.course_repository import CourseRepository
@@ -45,9 +46,8 @@ user_create_strategy = st.builds(
 
 course_create_strategy = st.builds(
     CourseCreate,
-    code=st.text(min_size=1, max_size=20, alphabet=st.characters(whitelist_categories=("Lu", "Ll", "Nd"), whitelist_characters="-_")),
-    name=st.text(min_size=1, max_size=100),
-    credits=st.integers(min_value=1, max_value=10),
+    subject_id=st.uuids(),
+    section=st.text(min_size=1, max_size=8, alphabet=st.characters(whitelist_categories=("Lu", "Ll", "Nd"))),
     academic_period=st.text(min_size=1, max_size=20),
 )
 
@@ -80,6 +80,16 @@ def _make_mock_session_for(entity_type: type) -> AsyncMock:
     async def _execute(stmt, *args, **kwargs):
         result = MagicMock()
         result.scalar_one_or_none.return_value = stored[0] if stored else None
+        if entity_type is Course and stored:
+            course = stored[0]
+            subject = Subject(
+                id=course.subject_id,
+                code="TST101",
+                name="Test Subject",
+                credits=3,
+                program_id=uuid.uuid4(),
+            )
+            result.first.return_value = (course, subject)
         return result
 
     mock_session.execute = AsyncMock(side_effect=_execute)
@@ -149,7 +159,7 @@ async def test_course_roundtrip_get_by_id(course_data: CourseCreate):
 
     Property 6 (Course – obtener_por_id): For any valid CourseCreate input,
     the Course returned by obtener_por_id(created.id) must have the same
-    code, name, credits, and academic_period as the original CourseCreate.
+    subject_id, section, and academic_period as the original CourseCreate.
     """
     mock_session = _make_mock_session_for(Course)
     repo = CourseRepository(session=mock_session)
@@ -159,9 +169,8 @@ async def test_course_roundtrip_get_by_id(course_data: CourseCreate):
     retrieved = await repo.obtener_por_id(created.id)
 
     assert retrieved is not None, "obtener_por_id must return the created course"
-    assert retrieved.code == course_data.code
-    assert retrieved.name == course_data.name
-    assert retrieved.credits == course_data.credits
+    assert retrieved.subject_id == course_data.subject_id
+    assert retrieved.section == course_data.section
     assert retrieved.academic_period == course_data.academic_period
 
 

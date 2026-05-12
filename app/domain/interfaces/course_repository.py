@@ -17,8 +17,14 @@ class ICourseRepository(ABC):
     @abstractmethod
     async def create(self, data: dict) -> CourseRead: ...
 
+    async def crear(self, data: CourseCreate) -> CourseRead:
+        return await self.create(data.model_dump())
+
     @abstractmethod
     async def get_by_id(self, course_id: UUID) -> CourseRead | None: ...
+
+    @abstractmethod
+    async def get_by_code(self, code: str) -> CourseRead | None: ...
 
     @abstractmethod
     async def list_by_subject(self, subject_id: UUID) -> list[CourseRead]: ...

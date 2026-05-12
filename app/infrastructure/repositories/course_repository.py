@@ -21,6 +21,9 @@ from app.infrastructure.repositories.audit_log_repository import AuditLogReposit
 
 def _to_read(course: Course, subject: Subject) -> CourseRead:
     """Combina Course + Subject en un CourseRead plano."""
+    evaluation_config = course.evaluation_config
+    if not isinstance(evaluation_config, dict):
+        evaluation_config = None
     return CourseRead(
         id=course.id,
         subject_id=course.subject_id,
@@ -33,7 +36,7 @@ def _to_read(course: Course, subject: Subject) -> CourseRead:
         name=subject.name,
         credits=subject.credits,
         program_id=subject.program_id,
-        evaluation_config=course.evaluation_config,
+        evaluation_config=evaluation_config,
     )
 
 
@@ -67,6 +70,13 @@ class CourseRepository(ICourseRepository):
     async def get_by_id(self, course_id: UUID) -> CourseRead | None:
         result = await self._session.execute(
             _base_joined_stmt().where(Course.id == course_id)
+        )
+        row = result.first()
+        return _to_read(row[0], row[1]) if row else None
+
+    async def get_by_code(self, code: str) -> CourseRead | None:
+        result = await self._session.execute(
+            _base_joined_stmt().where(Subject.code == code)
         )
         row = result.first()
         return _to_read(row[0], row[1]) if row else None
@@ -192,6 +202,10 @@ class CourseRepository(ICourseRepository):
 
     async def obtener_por_id(self, id: UUID) -> CourseRead | None:
         return await self.get_by_id(id)
+
+    async def crear(self, data) -> CourseRead:
+        payload = data.model_dump() if hasattr(data, "model_dump") else dict(data)
+        return await self.create(payload)
 
     async def listar_por_docente(self, docente_id: UUID) -> list[CourseRead]:
         return await self.list_by_professor(docente_id)
