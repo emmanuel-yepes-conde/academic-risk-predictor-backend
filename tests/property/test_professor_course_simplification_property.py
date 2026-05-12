@@ -17,6 +17,7 @@ import pytest
 from hypothesis import given, settings as h_settings, HealthCheck, assume
 from hypothesis import strategies as st
 
+from app.application.schemas.course import CourseRead
 from app.application.schemas.professor_course import ProfessorAssignmentRead
 from app.application.services.professor_course_service import ProfessorCourseService
 from app.domain.enums import RoleEnum, UserStatusEnum
@@ -249,11 +250,9 @@ def _make_course_rt(
     """Create a Course ORM object for round-trip test."""
     return Course(
         id=course_id,
-        code=code,
-        name=name,
-        credits=3,
+        subject_id=program_id,
+        section=code[:8],
         academic_period="2026-1",
-        program_id=program_id,
         professor_id=None,
         created_at=datetime.now(timezone.utc),
     )
@@ -280,10 +279,17 @@ def _build_service_for_roundtrip_rt(professor: User, course: Course):
     phase = {"current": "assign"}
 
     async def mock_execute(stmt):
+        try:
+            compiled_str = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+        except Exception:
+            compiled_str = str(stmt)
         if phase["current"] == "assign":
-            # assign_professor: select(User) — professor lookup
+            if "courses" in compiled_str:
+                return FakeScalarResult(course)
             return FakeScalarResult(professor)
         elif phase["current"] == "get_professor":
+            if "courses" in compiled_str:
+                return FakeScalarResult(course)
             # get_course_professor: select(User).where(User.id == course.professor_id)
             if course.professor_id is not None:
                 return FakeScalarResult(professor)
@@ -304,7 +310,21 @@ def _build_service_for_roundtrip_rt(professor: User, course: Course):
 
     async def mock_listar_por_docente(docente_id):
         if course.professor_id is not None and course.professor_id == docente_id:
-            return [course]
+            return [
+                CourseRead(
+                    id=course.id,
+                    subject_id=course.subject_id,
+                    section=course.section,
+                    academic_period=course.academic_period,
+                    professor_id=course.professor_id,
+                    status=course.status,
+                    created_at=course.created_at,
+                    code="TST101",
+                    name="Test Subject",
+                    credits=3,
+                    program_id=course.subject_id,
+                )
+            ]
         return []
 
     service._course_repo.listar_por_docente = AsyncMock(

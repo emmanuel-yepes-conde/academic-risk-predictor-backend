@@ -124,7 +124,7 @@ Oferta concreta de una `Subject` en un período y grupo específicos (sección).
 | `professor_id` | UUID \| None (FK→User) | Profesor asignado |
 | `status` | `CourseStatusEnum` | Estado de la oferta |
 | `created_at` | datetime | Fecha de creación |
-| `evaluation_config` | JSONB \| None | Configuración de distribución de notas del curso (cortes, porcentajes y actividades) |
+| `evaluation_config` | JSONB \| None | Configuración de distribución de notas del curso (cortes, porcentajes y actividades). En tests SQLite se compila como JSON portable sin cambiar el tipo PostgreSQL de producción. |
 | — | Constraint | Único: `(subject_id, section, academic_period)` |
 
 ### `Enrollment`
@@ -138,7 +138,7 @@ Matrícula de un estudiante en un `Course`. Contiene notas.
 | `status` | `EnrollmentStatusEnum` | Estado de la matrícula |
 | `enrollment_date` | datetime | Fecha de matrícula |
 | `updated_at` | datetime | Última actualización |
-| `grades` | JSONB \| None | Notas detalladas por corte (ver estructura abajo) |
+| `grades` | JSONB \| None | Notas detalladas por corte (ver estructura abajo). En tests SQLite se compila como JSON portable sin cambiar el tipo PostgreSQL de producción. |
 | `first_cohort_grade` | Decimal(3,2) \| None | Nota del primer corte |
 | `second_cohort_grade` | Decimal(3,2) \| None | Nota del segundo corte |
 | `third_cohort_grade` | Decimal(3,2) \| None | Nota del tercer corte |
@@ -315,7 +315,7 @@ Ubicados en `app/application/services/`. Orquestan lógica de negocio, no accede
 | `SubjectService` | CRUD de materias; carga masiva por CSV |
 | `ConsentService` | Verificar consentimiento de ML (lanza 403 si no hay) |
 | `MLApplicationService` | Puerta de entrada al ML: verifica consentimiento y delega a `AcademicRiskService` (predicción total y por cohorte) |
-| `ProfessorCourseService` | Asignar profesores; listar estudiantes del profesor (RB-04) |
+| `ProfessorCourseService` | Asignar profesores sobre `Course.professor_id`; verificar RB-04 consultando el `Course` ORM directo antes de listar estudiantes o escribir notas |
 | `AcademicRiskService` | Lógica ML pura: (1) modelo logístico para riesgo total con cohortes+total; (2) modelo analítico para riesgo por cohorte (parcial+seguimiento+asistencia) |
 
 ---
@@ -328,7 +328,7 @@ Las interfaces viven en `app/domain/interfaces/`; las implementaciones en `app/i
 |---|---|
 | `IUserRepository` | `create`, `get_by_id`, `get_by_email`, `get_by_microsoft_oid`, `list`, `count`, `update`, `update_status` |
 | `IEnrollmentRepository` | `create`, `get_by_id`, `get_by_student_and_course`, `update_course`, `update_status`, `list_by_student`, `list_by_course`, `update_grades` |
-| `ICourseRepository` | `create`, `get_by_id`, `list_by_subject`, `list_by_professor`, `list_by_program`, `list_all`, `count_all`, `update`, `update_status`, `save_evaluation_config`, `list_enrolled_students` |
+| `ICourseRepository` | `create`, `crear`, `get_by_id`, `obtener_por_id`, `get_by_code`, `list_by_subject`, `list_by_professor`, `listar_por_docente`, `list_by_program`, `listar_por_programa`, `list_all`, `count_all`, `update`, `update_status`, `save_evaluation_config`, `list_enrolled_students`, `listar_estudiantes_inscritos` |
 | `IProgramRepository` | `get_by_id`, `list_all`, `create`, `update`, `get_by_program_code`, `get_by_snies_code`, `delete` |
 | `ISubjectRepository` | `create`, `get_by_id`, `get_by_code(code, program_id)`, `list_by_program`, `list_all`, `update`, `update_status` |
 | `IConsentRepository` | `register_consent`, `get_consent` |

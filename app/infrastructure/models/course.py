@@ -38,7 +38,7 @@ class Course(SQLModel, table=True):
     # Estructura: [{"id": "first_cohort", "name": "Corte Uno", "percentage": 30, "date": "2026-03-08"}, ...]
     evaluation_config: dict | None = Field(
         default=None,
-        sa_column=sa.Column(JSONB, nullable=True),
+        sa_column=sa.Column(sa.JSON().with_variant(JSONB, "postgresql"), nullable=True),
     )
 
     __table_args__ = (
