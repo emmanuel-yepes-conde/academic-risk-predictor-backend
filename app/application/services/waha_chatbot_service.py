@@ -18,7 +18,7 @@ from app.infrastructure.models.enrollment import Enrollment
 from app.infrastructure.models.student_profile import StudentProfile
 from app.infrastructure.models.subject import Subject
 from app.infrastructure.models.user import User
-from app.services.ml_service import risk_service
+from app.services.ml_service import get_risk_service
 
 # Estado de conversación por número de teléfono: phone -> session dict
 _sessions: Dict[str, dict] = {}
@@ -176,7 +176,7 @@ class WahaChatbotService:
         ]
 
         if c1 is not None and c2 is not None and c3 is not None and final is not None:
-            result = risk_service.predict([c1, c2, c3, final])
+            result = get_risk_service().predict([c1, c2, c3, final])
             prob = result["probability"]
             nivel = result["risk_level"]
             emoji = "🔴" if nivel == "ALTO" else "🟡" if nivel == "MEDIO" else "🟢"
