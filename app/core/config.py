@@ -132,6 +132,10 @@ class Settings(BaseSettings):
     DB_POOL_MAX: int = Field(default=20, description="Tamaño máximo del pool de conexiones")
     DB_ECHO: bool = Field(default=False, description="Habilitar logging SQL de SQLAlchemy")
 
+    # Integración WAHA (WhatsApp HTTP API)
+    WAHA_URL: str = Field(default="", description="URL base de la instancia WAHA")
+    WAHA_API_KEY: str = Field(default="", description="API Key / contraseña de WAHA")
+
     # Configuración SMTP para envío de correos
     SMTP_SERVER: str = Field(default="smtp.gmail.com", description="Servidor SMTP")
     SMTP_PORT: int = Field(default=587, description="Puerto SMTP")

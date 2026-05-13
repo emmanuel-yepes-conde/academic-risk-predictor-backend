@@ -52,3 +52,5 @@ htmlcov/
 # Azure credentials (nunca subir al repo)
 AZURE_CREDENTIALS*.json
 
+# Added by code-review-graph
+.code-review-graph/

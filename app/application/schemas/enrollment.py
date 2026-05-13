@@ -64,6 +64,16 @@ class CourseGradesStructureRead(BaseModel):
     grades: dict | None
 
 
+class IndicatorsUpdate(BaseModel):
+    """Indicadores planos que el docente registra por inscripción."""
+
+    asistencia:     float | None = Field(default=None, ge=0, le=100,  description="Porcentaje de asistencia (0–100)")
+    seguimiento:    float | None = Field(default=None, ge=0, le=5,    description="Nota de seguimiento (0.0–5.0)")
+    nota_parcial_1: float | None = Field(default=None, ge=0, le=5,    description="Nota parcial 1 (0.0–5.0)")
+    logins:         int   | None = Field(default=None, ge=0,           description="Número de logins en plataforma LMS")
+    uso_tutorias:   bool  | None = Field(default=None,                 description="Si el estudiante usó tutorías")
+
+
 class RiskFromEnrollmentRequest(BaseModel):
     """Payload alternativo para predicción manual por cohortes.
     No se usa en el endpoint de riesgo por matrícula."""
