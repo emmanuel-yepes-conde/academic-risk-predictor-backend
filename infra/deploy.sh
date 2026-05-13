@@ -312,25 +312,29 @@ deploy() {
     local waha_url="${WAHA_URL:-}"
     local waha_api_key="${WAHA_API_KEY:-}"
 
+    local fqdn
+
     if az containerapp show --name "${ca_name}" --resource-group "${rg_name}" --output none 2>/dev/null; then
         log_info "Container App '${ca_name}' ya existe, actualizando..."
-        az containerapp registry set \
+
+        # Leer el FQDN primero (operación de sólo lectura, sin conflictos).
+        fqdn=$(az containerapp show \
             --name "${ca_name}" \
             --resource-group "${rg_name}" \
-            --server "${acr_login_server}" \
-            --username "${acr_user}" \
-            --password "${acr_pass}" \
-            --output none
-        az containerapp secret set \
-            --name "${ca_name}" \
-            --resource-group "${rg_name}" \
-            --secrets "database-url=${database_url}" "jwt-secret-key=${JWT_SECRET}" \
-            --output none
+            --query 'properties.configuration.ingress.fqdn' -o tsv)
+
+        # Una sola escritura: imagen + todas las variables de entorno.
+        # Evita el error ConflictingConcurrentWriteNotAllowed que ocurre
+        # cuando se encadenan registry-set → secret-set → update en ráfaga.
         az containerapp update \
             --name "${ca_name}" \
             --resource-group "${rg_name}" \
             --image "${image_full}" \
             --set-env-vars \
+                "AZURE_BACKEND_DNS=${fqdn}" \
+                "PUBLIC_BACKEND_URL=https://${fqdn}" \
+                "CORS_ORIGINS=http://localhost:3000,http://localhost:4321,http://localhost:5173" \
+                "CORS_ORIGIN_REGEX=https://.*\.vercel\.app" \
                 "WAHA_URL=${waha_url}" \
                 "WAHA_API_KEY=${waha_api_key}" \
             --output none
@@ -365,26 +369,22 @@ deploy() {
                 "WAHA_URL=${waha_url}" \
                 "WAHA_API_KEY=${waha_api_key}" \
             --output none
+
+        fqdn=$(az containerapp show \
+            --name "${ca_name}" \
+            --resource-group "${rg_name}" \
+            --query 'properties.configuration.ingress.fqdn' -o tsv)
+
+        # Dar tiempo a que Azure consolide la creación antes de la siguiente escritura.
+        sleep 15
+        az containerapp update \
+            --name "${ca_name}" \
+            --resource-group "${rg_name}" \
+            --set-env-vars \
+                "AZURE_BACKEND_DNS=${fqdn}" \
+                "PUBLIC_BACKEND_URL=https://${fqdn}" \
+            --output none
     fi
-
-    local fqdn
-    fqdn=$(az containerapp show \
-        --name "${ca_name}" \
-        --resource-group "${rg_name}" \
-        --query 'properties.configuration.ingress.fqdn' -o tsv)
-
-    log_info "Registrando URL pública del backend en variables del Container App..."
-    az containerapp update \
-        --name "${ca_name}" \
-        --resource-group "${rg_name}" \
-        --set-env-vars \
-            "AZURE_BACKEND_DNS=${fqdn}" \
-            "PUBLIC_BACKEND_URL=https://${fqdn}" \
-            "CORS_ORIGINS=http://localhost:3000,http://localhost:4321,http://localhost:5173" \
-            "CORS_ORIGIN_REGEX=https://.*\.vercel\.app" \
-            "WAHA_URL=${waha_url}" \
-            "WAHA_API_KEY=${waha_api_key}" \
-        --output none
 
     log_success "Container App '${ca_name}' desplegado. URL: https://${fqdn}"
     log_info "Las migraciones Alembic se ejecutan automáticamente al arrancar el contenedor."
