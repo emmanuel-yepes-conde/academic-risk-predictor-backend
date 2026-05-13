@@ -268,16 +268,22 @@ deploy() {
     # -----------------------------------------------------------------------
     # Paso 4: Construir imagen Docker en ACR (antes de crear el Container App)
     # -----------------------------------------------------------------------
-    log_info "Paso 4/6: Construyendo imagen Docker en ACR '${acr_name}'..."
+    # Etiqueta única por despliegue para evitar que Azure reutilice una imagen
+    # en caché al recibir la misma referencia ":latest".
+    local deploy_tag
+    deploy_tag="$(date +%Y%m%d%H%M%S)${GITHUB_SHA:+-${GITHUB_SHA:0:7}}"
+
+    log_info "Paso 4/6: Construyendo imagen Docker en ACR '${acr_name}' (tag=${deploy_tag})..."
     if ! az acr build \
         --registry "${acr_name}" \
-        --image mpra-backend:latest \
+        --image "mpra-backend:${deploy_tag}" \
+        --image "mpra-backend:latest" \
         --file "${SCRIPT_DIR}/../Dockerfile" \
         "${SCRIPT_DIR}/.." 2>&1; then
         log_error "Falló la construcción de la imagen Docker en ACR."
         exit 1
     fi
-    log_success "Imagen Docker 'mpra-backend:latest' construida y publicada en ACR."
+    log_success "Imagen Docker 'mpra-backend:${deploy_tag}' construida y publicada en ACR."
 
     # -----------------------------------------------------------------------
     # Paso 5: Obtener credenciales admin del ACR
@@ -301,7 +307,10 @@ deploy() {
     local db_password_encoded
     db_password_encoded=$(printf '%s' "${DB_PASSWORD}" | python3 -c "import sys,urllib.parse; print(urllib.parse.quote(sys.stdin.read(), safe=''))")
     local database_url="postgresql+asyncpg://mpraadmin:${db_password_encoded}@${postgres_host}:5432/mpra_db?ssl=require"
-    local image_full="${acr_login_server}/mpra-backend:latest"
+    # Usar la etiqueta única generada en el paso 4 para forzar un pull real de la imagen.
+    local image_full="${acr_login_server}/mpra-backend:${deploy_tag}"
+    local waha_url="${WAHA_URL:-}"
+    local waha_api_key="${WAHA_API_KEY:-}"
 
     if az containerapp show --name "${ca_name}" --resource-group "${rg_name}" --output none 2>/dev/null; then
         log_info "Container App '${ca_name}' ya existe, actualizando..."
@@ -321,6 +330,9 @@ deploy() {
             --name "${ca_name}" \
             --resource-group "${rg_name}" \
             --image "${image_full}" \
+            --set-env-vars \
+                "WAHA_URL=${waha_url}" \
+                "WAHA_API_KEY=${waha_api_key}" \
             --output none
     else
         log_info "Creando Container App '${ca_name}' con imagen MPRA..."
@@ -350,6 +362,8 @@ deploy() {
                 "MODEL_PATH=ml_models/modelo_logistico.joblib" \
                 "SCALER_PATH=ml_models/scaler.joblib" \
                 "DATASET_PATH=datasets/dataset_estudiantes_decimal.csv" \
+                "WAHA_URL=${waha_url}" \
+                "WAHA_API_KEY=${waha_api_key}" \
             --output none
     fi
 
@@ -368,6 +382,8 @@ deploy() {
             "PUBLIC_BACKEND_URL=https://${fqdn}" \
             "CORS_ORIGINS=http://localhost:3000,http://localhost:4321,http://localhost:5173" \
             "CORS_ORIGIN_REGEX=https://.*\.vercel\.app" \
+            "WAHA_URL=${waha_url}" \
+            "WAHA_API_KEY=${waha_api_key}" \
         --output none
 
     log_success "Container App '${ca_name}' desplegado. URL: https://${fqdn}"
