@@ -264,6 +264,7 @@ Los schemas Pydantic viven en `app/application/schemas/`. Son los contratos de e
 | `EnrollmentRead` | `id`, `student_id`, `course_id`, `status`, `enrollment_date`, `updated_at` | Leer matrícula |
 | `GradesRead` | `id`, `student_id`, `course_id`, `grades`, `first_cohort_grade`, `second_cohort_grade`, `third_cohort_grade`, `final_grade` | Leer notas |
 | `GradesUpdate` | `grades: dict` | Registrar/actualizar notas |
+| `IndicatorsUpdate` | `asistencia` (0–100), `seguimiento` (0–5), `nota_parcial_1` (0–5), `logins`, `uso_tutorias` | Actualizar indicadores planos por el docente (`PATCH /indicators`) |
 | `CourseGradesStructureRead` | `course_id`, `grades` | Leer estructura JSON de notas a nivel curso (desde enrollments) |
 | `RiskFromEnrollmentRequest` | `nota_corte_1`, `nota_corte_2`, `nota_corte_final`, `nota_total` | Predicción manual por cohortes (payload alternativo) |
 
@@ -622,3 +623,38 @@ Campos heredados del dataset institucional. Se usan principalmente en `StudentPr
 | `USBCO` | Código de la institución (Universidad de San Buenaventura Colombia) |
 | `SNIES` | Sistema Nacional de Información de la Educación Superior — identificador oficial del MEN |
 | `LMS` | Learning Management System — plataforma digital de gestión del aprendizaje |
+
+---
+
+## Chatbot de WhatsApp (WAHA)
+
+### Integración
+
+| Término | Definición |
+|---|---|
+| **WAHA** | WhatsApp HTTP API — plataforma que expone la API de WhatsApp como servicio HTTP REST. Permite enviar y recibir mensajes desde el backend. |
+| **Webhook WAHA** | Endpoint `POST /api/v1/waha/webhook` que recibe los mensajes entrantes de WhatsApp enviados por WAHA cuando llega un mensaje al número configurado. |
+| **Session (WAHA)** | Nombre de la sesión de WhatsApp activa en WAHA (por defecto `"default"`). Se incluye en cada petición a la API de WAHA. |
+| **chatId** | Identificador de chat en WhatsApp con formato `<numero>@c.us` (ej: `573001234567@c.us`). |
+
+### Variables de entorno WAHA
+
+| Variable | Descripción |
+|---|---|
+| `WAHA_URL` | URL base de la instancia WAHA (ej: `https://waha-...azurecontainerapps.io`) |
+| `WAHA_API_KEY` | Contraseña / API Key para autenticar peticiones a WAHA (header `X-Api-Key`) |
+
+### Flujo conversacional
+
+| Paso | Estado interno | Descripción |
+|---|---|---|
+| 1 | `WAITING_DOCUMENT` | El bot solicita el número de documento del estudiante. |
+| 2 | `WAITING_SUBJECT` | El bot muestra las materias activas inscritas y espera que el usuario elija un número. |
+| 3 | — | El bot ejecuta la predicción de riesgo con los datos de la inscripción seleccionada y devuelve el resultado. Regresa al paso 2 para permitir otra consulta. |
+
+### Servicios involucrados
+
+| Archivo | Responsabilidad |
+|---|---|
+| `app/application/services/waha_chatbot_service.py` | Máquina de estados conversacional. Consulta BD (estudiante, inscripciones) y llama a `AcademicRiskService` para la predicción. |
+| `app/api/v1/endpoints/waha_webhook.py` | Endpoint FastAPI que recibe el webhook de WAHA, delega al `WahaChatbotService` y envía la respuesta vía `POST /api/sendText`. |

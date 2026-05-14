@@ -76,10 +76,7 @@ class AcademicRiskService:
             X = df[self.FEATURE_COLUMNS].values
             y = df["riesgo_reprobacion"].values
         else:
-            raise FileNotFoundError(
-                "No se pudo entrenar el modelo ML: no hay datos suficientes en BD "
-                f"ni dataset disponible en {dataset_path}."
-            )
+            return
 
         self.scaler = StandardScaler()
         X_scaled = self.scaler.fit_transform(X)
@@ -376,4 +373,11 @@ class AcademicRiskService:
         return self.promedio_estudiantes_aprobados
 
 
-risk_service = AcademicRiskService()
+_risk_service: AcademicRiskService | None = None
+
+
+def get_risk_service() -> AcademicRiskService:
+    global _risk_service
+    if _risk_service is None:
+        _risk_service = AcademicRiskService()
+    return _risk_service

@@ -5,9 +5,9 @@ Centraliza todas las configuraciones y variables de entorno
 
 import os
 import uuid
-from typing import List, Union, Annotated, Optional
+from typing import List, Optional
 from pydantic_settings import BaseSettings
-from pydantic import Field, BeforeValidator, model_validator
+from pydantic import Field, model_validator
 
 
 def parse_cors_origins(v):
@@ -71,10 +71,12 @@ class Settings(BaseSettings):
         description="URL pública del backend consumida por clientes externos"
     )
     
-    # Configuración CORS - Usa BeforeValidator para permitir string o lista
-    CORS_ORIGINS: Annotated[List[str], BeforeValidator(parse_cors_origins)] = Field(
-        default=["*"],
-        description="Orígenes permitidos para CORS"
+    # Configuración CORS - Se almacena como str para evitar que pydantic-settings
+    # intente parsearlo como JSON antes de la validación. El parseo se hace en
+    # main.py vía parse_cors_origins().
+    CORS_ORIGINS: str = Field(
+        default="*",
+        description="Orígenes permitidos para CORS (separados por coma)"
     )
     CORS_ORIGIN_REGEX: Optional[str] = Field(
         default=None,
@@ -133,6 +135,10 @@ class Settings(BaseSettings):
     DB_POOL_MAX: int = Field(default=20, description="Tamaño máximo del pool de conexiones")
     DB_ECHO: bool = Field(default=False, description="Habilitar logging SQL de SQLAlchemy")
 
+    # Integración WAHA (WhatsApp HTTP API)
+    WAHA_URL: str = Field(default="", description="URL base de la instancia WAHA")
+    WAHA_API_KEY: str = Field(default="", description="API Key / contraseña de WAHA")
+
     # Configuración SMTP para envío de correos
     SMTP_SERVER: str = Field(default="smtp.gmail.com", description="Servidor SMTP")
     SMTP_PORT: int = Field(default=587, description="Puerto SMTP")
@@ -140,6 +146,18 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = Field(default="", description="Contraseña SMTP")
     FROM_EMAIL: str = Field(default="", description="Dirección de correo remitente")
     FROM_NAME: str = Field(default="Academic Risk Notifications", description="Nombre del remitente")
+
+    # Azure Communication Services (ACS) — notificaciones de remisiones
+    # Si no se configuran, el servicio ACS queda desactivado sin afectar el resto.
+    ACS_CONNECTION_STRING: str = Field(default="", description="Connection string de ACS")
+    ACS_SENDER_EMAIL: str = Field(
+        default="DoNotReply@b314ee6e-8e72-4c0e-91f3-3653467003fa.azurecomm.net",
+        description="Dirección remitente configurada en ACS",
+    )
+    ACS_CONSEJERIA_EMAIL: str = Field(
+        default="",
+        description="Correo del área de consejería/permanencia que recibe notificaciones",
+    )
 
     @model_validator(mode='before')
     @classmethod
