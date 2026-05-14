@@ -1,5 +1,6 @@
 """ReferralService — lógica de negocio para remisiones a permanencia."""
 
+import logging
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -17,7 +18,11 @@ from app.application.schemas.referral import (
 from app.domain.enums import RoleEnum
 from app.infrastructure.models.course import Course
 from app.infrastructure.models.enrollment import Enrollment
+from app.infrastructure.models.user import User
 from app.infrastructure.repositories.referral_repository import ReferralRepository
+from app.services.acs_email_service import notify_referral_created
+
+logger = logging.getLogger(__name__)
 
 
 class ReferralService:
@@ -44,6 +49,12 @@ class ReferralService:
         if course is None:
             raise HTTPException(status_code=404, detail="Curso no encontrado")
         return course
+
+    async def _get_user(self, user_id: UUID) -> User | None:
+        result = await self._session.execute(
+            select(User).where(User.id == user_id)
+        )
+        return result.scalar_one_or_none()
 
     async def _check_professor_access(self, enrollment: Enrollment, professor_id: UUID) -> None:
         course = await self._get_course(enrollment.course_id)
@@ -74,6 +85,38 @@ class ReferralService:
             "created_at":            datetime.now(timezone.utc),
             "updated_at":            datetime.now(timezone.utc),
         })
+
+        # ── Notificaciones ACS (fire-and-forget, no bloquea la respuesta) ──
+        try:
+            course  = await self._get_course(enrollment.course_id)
+            student = await self._get_user(enrollment.student_id)
+
+            tipo_display = (
+                body.tipo_remision_otro
+                if body.tipo_remision.value == "Otros" and body.tipo_remision_otro
+                else body.tipo_remision.value
+            )
+
+            if student:
+                results = await notify_referral_created(
+                    student_name=student.full_name,
+                    student_email=student.email,
+                    professor_name=getattr(current_user, "full_name", "Docente"),
+                    course_name=f"{course.code} — {course.name}",
+                    tipo_remision=tipo_display,
+                    observaciones=body.observaciones or "Sin observaciones.",
+                    fecha_remision=str(body.fecha_remision),
+                )
+                logger.info(
+                    "Notificaciones remisión %s → estudiante=%s, consejería=%s",
+                    referral.id,
+                    results["student"],
+                    results["consejeria"],
+                )
+        except Exception as exc:
+            # Las notificaciones nunca deben bloquear la creación de la remisión
+            logger.error("Error al enviar notificaciones ACS: %s", exc, exc_info=True)
+
         return ReferralRead.model_validate(referral)
 
     async def list_by_enrollment(
