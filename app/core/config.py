@@ -107,6 +107,9 @@ class Settings(BaseSettings):
     UMBRAL_RIESGO_ALTO: float = Field(default=0.7, ge=0, le=1)
     UMBRAL_RIESGO_MEDIO: float = Field(default=0.4, ge=0, le=1)
 
+    # Versión actual de los términos y condiciones (consentimiento ML)
+    TERMS_VERSION: str = Field(default="1.0", description="Versión vigente de los términos del consentimiento ML")
+
     # Configuración de base de datos
     DB_USER: str = Field(default="mpra_user", description="Usuario de la base de datos")
     DB_PASSWORD: str = Field(default="mpra_secret", description="Contraseña de la base de datos")

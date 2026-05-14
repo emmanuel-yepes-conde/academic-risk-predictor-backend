@@ -169,7 +169,7 @@ Registro del consentimiento informado del estudiante para uso de ML.
 | Campo | Tipo | Descripción |
 |---|---|---|
 | `id` | UUID (PK) | Identificador único |
-| `student_id` | UUID (FK→User, unique) | Estudiante que dio el consentimiento |
+| `student_id` | UUID (FK→User, indexado) | Estudiante que dio el consentimiento. No es único: el historial de aceptaciones/revocaciones se modela como múltiples filas inmutables por estudiante. |
 | `accepted` | bool | Si aceptó o rechazó |
 | `terms_version` | str | Versión del documento de términos aceptado |
 | `accepted_at` | datetime | Momento del consentimiento |
@@ -284,6 +284,8 @@ Los schemas Pydantic viven en `app/application/schemas/`. Son los contratos de e
 | Schema | Campos | Uso |
 |---|---|---|
 | `ConsentRead` | `id`, `student_id`, `accepted`, `terms_version`, `accepted_at` | Leer registro de consentimiento |
+| `ConsentStatus` | `has_accepted`, `current_terms_version`, `consent?` | Estado del consentimiento ML del estudiante autenticado (true solo si la versión aceptada coincide con la vigente) |
+| `ConsentAcceptRequest` | `accepted` (default `true`) | Cuerpo para registrar aceptación de los términos |
 
 ### Auditoría (`audit_log.py`)
 
@@ -458,6 +460,13 @@ Base path: `/api/v1`
 | POST | `/predict` | Opcional (JWT) | Predecir riesgo académico. Si se pasa `student_id`, verifica consentimiento ML. |
 | POST | `/predict/cohort` | Opcional (JWT) | Predecir riesgo de un cohorte con parcial, seguimiento y asistencia. Si se pasa `student_id`, verifica consentimiento ML. |
 
+### Consentimiento (`/consents`)
+
+| Método | Path | Auth | Descripción |
+|---|---|---|---|
+| GET | `/consents/me` | STUDENT | Estado del consentimiento ML del estudiante autenticado contra la versión vigente (`TERMS_VERSION`) |
+| POST | `/consents/me` | STUDENT | Registra nueva aceptación de los términos vigentes (crea registro inmutable en `consents`) |
+
 ### Health Check
 
 | Método | Path | Auth | Descripción |
@@ -574,6 +583,7 @@ Base path: `/api/v1`
 | `DATASET_PATH` | Ruta de CSV opcional para fallback de entrenamiento/referencia ML | `datasets/dataset_estudiantes_decimal.csv` |
 | `UMBRAL_RIESGO_ALTO` | Umbral de riesgo alto | `0.7` |
 | `UMBRAL_RIESGO_MEDIO` | Umbral de riesgo medio | `0.4` |
+| `TERMS_VERSION` | Versión vigente de los términos del consentimiento ML. Si un estudiante aceptó una versión anterior, el front lo vuelve a forzar a aceptar. | `"1.0"` |
 
 ### Stack tecnológico
 

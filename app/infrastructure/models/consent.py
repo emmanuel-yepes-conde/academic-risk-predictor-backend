@@ -13,7 +13,7 @@ class Consent(SQLModel, table=True):
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     student_id: uuid.UUID = Field(
-        foreign_key="users.id", unique=True, nullable=False
+        foreign_key="users.id", nullable=False, index=True
     )
     accepted: bool = Field(nullable=False)
     terms_version: str = Field(nullable=False)
