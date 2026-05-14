@@ -8,7 +8,6 @@ from decimal import Decimal
 
 import sqlalchemy as sa
 from sqlalchemy import UniqueConstraint
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, SQLModel
 
 from app.domain.enums import EnrollmentStatusEnum
@@ -40,7 +39,7 @@ class Enrollment(SQLModel, table=True):
     # Escala 0.0–5.0. Nota mínima aprobatoria: 3.0.
     grades: dict | None = Field(
         default=None,
-        sa_column=sa.Column(JSONB, nullable=True),
+        sa_column=sa.Column(sa.JSON, nullable=True),
     )
 
     # Columnas calculadas: se actualizan en código al modificar grades.
