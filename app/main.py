@@ -11,6 +11,7 @@ from app.core.config import settings
 from app.api.v1.endpoints import (
     prediction, health, users, auth,
     notifications, programs, courses, enrollments, subjects, referrals,
+    consents,
 )
 from app.domain.exceptions import (
     AuthenticationError,
@@ -96,6 +97,7 @@ app.include_router(enrollments.router,   prefix="/api/v1", tags=["Inscripciones"
 app.include_router(subjects.router,      prefix="/api/v1", tags=["Materias"])
 app.include_router(referrals.router,     prefix="/api/v1", tags=["Remisiones"])
 app.include_router(notifications.router, prefix="/api/v1", tags=["Notificaciones"])
+app.include_router(consents.router,      prefix="/api/v1", tags=["Consentimiento"])
 
 @app.get("/")
 async def root():
