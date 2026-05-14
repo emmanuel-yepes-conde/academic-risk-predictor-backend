@@ -47,21 +47,3 @@ class MLApplicationService:
         """
         await self._consent.verify_ml_consent(student_id)
         return self._ml.predict(features)
-
-    async def predict_cohort_with_consent_check(
-        self,
-        *,
-        student_id: UUID,
-        cohort_key: str,
-        nota_parcial: float,
-        promedio_seguimiento: float,
-        porcentaje_asistencia: float,
-    ) -> Dict:
-        """Verifica consentimiento y ejecuta predicción de riesgo por cohorte."""
-        await self._consent.verify_ml_consent(student_id)
-        return self._ml.predict_cohort_risk(
-            cohort_key=cohort_key,
-            nota_parcial=nota_parcial,
-            promedio_seguimiento=promedio_seguimiento,
-            porcentaje_asistencia=porcentaje_asistencia,
-        )

@@ -32,6 +32,3 @@ class IProgramRepository(ABC):
 
     @abstractmethod
     async def get_by_snies_code(self, snies_code: int) -> Program | None: ...
-
-    @abstractmethod
-    async def delete(self, program_id: UUID) -> bool: ...

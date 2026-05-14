@@ -20,7 +20,6 @@ from app.application.services.professor_course_service import ProfessorCourseSer
 from app.domain.enums import RoleEnum, UserStatusEnum
 from app.infrastructure.models.course import Course
 from app.infrastructure.models.enrollment import Enrollment
-from app.infrastructure.models.subject import Subject
 from app.infrastructure.models.user import User
 from app.infrastructure.repositories.course_repository import CourseRepository
 
@@ -32,27 +31,15 @@ from tests.integration.conftest import make_mock_session, now
 # ---------------------------------------------------------------------------
 
 def _course_create(**kwargs) -> CourseCreate:
-    subject_id = kwargs.pop("subject_id", uuid.uuid4())
     defaults = dict(
-        subject_id=subject_id,
-        section="A",
-        academic_period="2024-1",
-    )
-    defaults.update(kwargs)
-    return CourseCreate(**defaults)
-
-
-def _make_subject(**kwargs) -> Subject:
-    defaults = dict(
-        id=uuid.uuid4(),
         code=f"CS{uuid.uuid4().hex[:4].upper()}",
         name="Integration Course",
         credits=3,
+        academic_period="2024-1",
         program_id=uuid.uuid4(),
-        created_at=now(),
     )
     defaults.update(kwargs)
-    return Subject(**defaults)
+    return CourseCreate(**defaults)
 
 
 def _make_student(**kwargs) -> User:
@@ -93,22 +80,12 @@ async def test_crear_and_obtener_por_id():
     session = make_mock_session()
     repo = CourseRepository(session=session)
 
-    subject = _make_subject(name="Algorithms", credits=4)
-    data = _course_create(subject_id=subject.id)
-
-    async def _execute(stmt, *args, **kwargs):
-        result = MagicMock()
-        course = next(o for o in session._added if isinstance(o, Course))
-        result.first.return_value = (course, subject)
-        return result
-
-    session.execute = AsyncMock(side_effect=_execute)
+    data = _course_create(name="Algorithms", credits=4)
     created = await repo.crear(data)
 
-    assert created.subject_id == data.subject_id
-    assert created.code == subject.code
-    assert created.name == subject.name
-    assert created.credits == subject.credits
+    assert created.code == data.code
+    assert created.name == data.name
+    assert created.credits == data.credits
     assert created.academic_period == data.academic_period
 
     fetched = await repo.obtener_por_id(created.id)
@@ -121,7 +98,6 @@ async def test_obtener_por_id_not_found():
     """obtener_por_id() returns None for an unknown UUID."""
     async def _empty_execute(stmt, *args, **kwargs):
         result = MagicMock()
-        result.first.return_value = None
         result.scalar_one_or_none.return_value = None
         result.scalars.return_value.all.return_value = []
         return result
@@ -140,17 +116,17 @@ async def test_listar_por_docente():
     professor = _make_professor()
     course = Course(
         id=uuid.uuid4(),
-        subject_id=uuid.uuid4(),
-        section="A",
+        code="MAT101",
+        name="Calculus",
+        credits=4,
         academic_period="2024-1",
-        professor_id=professor.id,
         created_at=now(),
     )
-    subject = _make_subject(id=course.subject_id, code="MAT101", name="Calculus", credits=4)
 
     async def _execute(stmt, *args, **kwargs):
         result = MagicMock()
-        result.all.return_value = [(course, subject)]
+        result.scalar_one_or_none.return_value = course
+        result.scalars.return_value.all.return_value = [course]
         return result
 
     session = make_mock_session()
@@ -225,9 +201,11 @@ def _make_course_with_professor(professor_id: uuid.UUID | None = None, **kwargs)
     """Create a Course instance with optional professor_id."""
     defaults = dict(
         id=uuid.uuid4(),
-        subject_id=uuid.uuid4(),
-        section="A",
+        code=f"CS{uuid.uuid4().hex[:4].upper()}",
+        name="Test Course",
+        credits=3,
         academic_period="2024-1",
+        program_id=uuid.uuid4(),
         professor_id=professor_id,
         created_at=now(),
     )
@@ -354,14 +332,12 @@ async def test_list_professor_courses_returns_course_read_with_professor_id():
     Validates: Requirements 7.3, 7.5
     """
     professor = _make_professor_user()
-    course1 = _make_course_with_professor(professor_id=professor.id, section="A")
-    course2 = _make_course_with_professor(professor_id=professor.id, section="B")
-    subject1 = _make_subject(id=course1.subject_id, name="Calculus")
-    subject2 = _make_subject(id=course2.subject_id, name="Algebra")
+    course1 = _make_course_with_professor(professor_id=professor.id, name="Calculus")
+    course2 = _make_course_with_professor(professor_id=professor.id, name="Algebra")
 
     async def _execute(stmt, *args, **kwargs):
         result = MagicMock()
-        result.all.return_value = [(course1, subject1), (course2, subject2)]
+        result.scalars.return_value.all.return_value = [course1, course2]
         return result
 
     session = AsyncMock()

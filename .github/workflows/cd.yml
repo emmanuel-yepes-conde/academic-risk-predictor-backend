@@ -36,9 +36,6 @@ jobs:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Desplegar en Dev
-        env:
-          WAHA_URL: ${{ secrets.WAHA_URL }}
-          WAHA_API_KEY: ${{ secrets.WAHA_API_KEY }}
         run: |
           bash infra/deploy.sh \
             -e dev \

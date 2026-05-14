@@ -38,7 +38,3 @@ class User(SQLModel, table=True):
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
     )
-    last_login: datetime | None = Field(
-        default=None,
-        sa_column=sa.Column(sa.DateTime(timezone=True), nullable=True),
-    )

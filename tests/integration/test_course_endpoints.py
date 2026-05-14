@@ -21,6 +21,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app.core.config import settings
 from app.domain.enums import CourseStatusEnum, RoleEnum
+from app.infrastructure.models.course import Course
 from app.main import app
 from app.infrastructure.database import get_session
 
@@ -46,32 +47,28 @@ def _create_access_token(
     return jwt.encode(claims, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
 
-def _make_course(**kwargs):
-    """Build a CourseRead instance with sensible defaults."""
-    from app.application.schemas.course import CourseRead
-
+def _make_course(**kwargs) -> Course:
+    """Build a Course model instance with sensible defaults."""
     defaults = dict(
         id=uuid.uuid4(),
-        subject_id=uuid.uuid4(),
-        section="A",
         code=f"CS{uuid.uuid4().hex[:4].upper()}",
         name="Test Course",
         credits=3,
         academic_period="2024-1",
         program_id=uuid.uuid4(),
-        professor_id=None,
         status=CourseStatusEnum.ACTIVE,
         created_at=datetime.now(timezone.utc),
-        evaluation_config=None,
     )
     defaults.update(kwargs)
-    return CourseRead(**defaults)
+    return Course(**defaults)
 
 
 VALID_COURSE_BODY = {
-    "subject_id": str(uuid.uuid4()),
-    "section": "A",
+    "code": "MAT101",
+    "name": "Cálculo I",
+    "credits": 4,
     "academic_period": "2024-1",
+    "program_id": str(uuid.uuid4()),
 }
 
 
@@ -118,7 +115,7 @@ async def test_get_courses_returns_200(client: AsyncClient):
         from app.application.schemas.course import CourseRead
 
         mock_list.return_value = PaginatedResponse[CourseRead](
-            data=[course],
+            data=[CourseRead.model_validate(course)],
             total=1,
             skip=0,
             limit=20,
@@ -181,7 +178,7 @@ async def test_get_course_by_id_returns_200(client: AsyncClient):
     ) as mock_get:
         from app.application.schemas.course import CourseRead
 
-        mock_get.return_value = course
+        mock_get.return_value = CourseRead.model_validate(course)
         response = await client.get(
             f"/api/v1/courses/{course.id}",
             headers={"Authorization": f"Bearer {token}"},
@@ -235,7 +232,7 @@ async def test_post_courses_returns_201(client: AsyncClient):
     ) as mock_create:
         from app.application.schemas.course import CourseRead
 
-        mock_create.return_value = created_course
+        mock_create.return_value = CourseRead.model_validate(created_course)
         response = await client.post(
             "/api/v1/courses",
             json=VALID_COURSE_BODY,
@@ -285,9 +282,11 @@ async def test_post_courses_missing_field_returns_422(client: AsyncClient):
     """POST with missing required field returns 422."""
     token = _create_access_token(role=RoleEnum.ADMIN)
     incomplete_body = {
-        "section": "A",
-        # subject_id missing
+        "code": "MAT101",
+        "name": "Cálculo I",
+        # credits missing
         "academic_period": "2024-1",
+        "program_id": str(uuid.uuid4()),
     }
 
     response = await client.post(
@@ -343,7 +342,7 @@ async def test_patch_course_returns_200(client: AsyncClient):
     """Valid PATCH with ADMIN token returns 200 with updated course data."""
     token = _create_access_token(role=RoleEnum.ADMIN)
     course_id = uuid.uuid4()
-    updated_course = _make_course(id=course_id, section="B")
+    updated_course = _make_course(id=course_id, name="Cálculo Diferencial")
 
     with patch(
         "app.api.v1.endpoints.courses.CourseService.update_course",
@@ -351,16 +350,16 @@ async def test_patch_course_returns_200(client: AsyncClient):
     ) as mock_update:
         from app.application.schemas.course import CourseRead
 
-        mock_update.return_value = updated_course
+        mock_update.return_value = CourseRead.model_validate(updated_course)
         response = await client.patch(
             f"/api/v1/courses/{course_id}",
-            json={"section": "B"},
+            json={"name": "Cálculo Diferencial"},
             headers={"Authorization": f"Bearer {token}"},
         )
 
     assert response.status_code == 200
     body = response.json()
-    assert body["section"] == "B"
+    assert body["name"] == "Cálculo Diferencial"
     assert body["id"] == str(course_id)
 
 
@@ -383,7 +382,7 @@ async def test_patch_course_not_found_returns_404(client: AsyncClient):
     ):
         response = await client.patch(
             f"/api/v1/courses/{course_id}",
-            json={"section": "B"},
+            json={"name": "Nuevo Nombre"},
             headers={"Authorization": f"Bearer {token}"},
         )
 
@@ -408,7 +407,7 @@ async def test_patch_course_status_returns_200(client: AsyncClient):
     ) as mock_status:
         from app.application.schemas.course import CourseRead
 
-        mock_status.return_value = updated_course
+        mock_status.return_value = CourseRead.model_validate(updated_course)
         response = await client.patch(
             f"/api/v1/courses/{course_id}/status",
             json={"status": "INACTIVE"},

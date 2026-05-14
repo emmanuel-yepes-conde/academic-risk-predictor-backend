@@ -1,6 +1,6 @@
 """API Endpoints."""
 
-from app.api.v1.endpoints import auth, courses, enrollments, health, prediction, programs, referrals, users
+from app.api.v1.endpoints import auth, courses, enrollments, health, prediction, programs, users
 
 __all__ = [
     "auth",
@@ -9,6 +9,5 @@ __all__ = [
     "health",
     "prediction",
     "programs",
-    "referrals",
     "users",
 ]

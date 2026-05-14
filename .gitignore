@@ -17,7 +17,6 @@ ml_models/*.joblib
 # IDEs
 .vscode/
 .idea/
-.claude/
 *.swp
 *.swo
 *~
@@ -52,5 +51,3 @@ htmlcov/
 # Azure credentials (nunca subir al repo)
 AZURE_CREDENTIALS*.json
 
-# Added by code-review-graph
-.code-review-graph/

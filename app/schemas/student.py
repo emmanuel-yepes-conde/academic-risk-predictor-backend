@@ -1,85 +1,154 @@
-"""Schemas de entrada/salida para predicción de riesgo académico."""
+"""
+Schemas de Estudiante - DTOs (Data Transfer Objects)
+Define los contratos de datos de entrada y salida para el API
+"""
 
-from __future__ import annotations
-
-from typing import Dict, Literal
-
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
+from typing import Dict, List
 
 
 class StudentInput(BaseModel):
-    """Datos de notas para predecir riesgo."""
-
-    nota_corte_1: float = Field(..., ge=0, le=5, description="Nota corte 1 (0-5)")
-    nota_corte_2: float = Field(..., ge=0, le=5, description="Nota corte 2 (0-5)")
-    nota_corte_final: float = Field(..., ge=0, le=5, description="Nota corte final (0-5)")
-    nota_total: float | None = Field(
-        default=None,
-        ge=0,
-        le=5,
-        description="Nota total ponderada (0-5). Si no se envía, se calcula desde cortes.",
+    """
+    DTO de Entrada - Datos del estudiante para predicción
+    Equivalente a Zod Schema en TypeScript
+    """
+    promedio_asistencia: float = Field(
+        ..., 
+        ge=0, 
+        le=100, 
+        description="Porcentaje de asistencia (0-100)"
     )
-
-    @model_validator(mode="after")
-    def set_total_if_missing(self):
-        if self.nota_total is None:
-            self.nota_total = round(
-                (self.nota_corte_1 * 0.30)
-                + (self.nota_corte_2 * 0.30)
-                + (self.nota_corte_final * 0.40),
-                2,
-            )
-        return self
+    promedio_seguimiento: float = Field(
+        ..., 
+        ge=0, 
+        le=5.0, 
+        description="Nota promedio de quizzes y tareas (0-5)"
+    )
+    nota_parcial_1: float = Field(
+        ..., 
+        ge=0, 
+        le=5.0, 
+        description="Nota del primer parcial (Variable crítica, 0-5)"
+    )
+    inicios_sesion_plataforma: int = Field(
+        ..., 
+        ge=0, 
+        description="Total de logins en el LMS"
+    )
+    uso_tutorias: int = Field(
+        ..., 
+        ge=0, 
+        le=10, 
+        description="Número de tutorías utilizadas (0-10)"
+    )
 
     class Config:
         json_schema_extra = {
             "example": {
-                "nota_corte_1": 3.8,
-                "nota_corte_2": 3.4,
-                "nota_corte_final": 4.1,
-                "nota_total": 3.79,
+                "promedio_asistencia": 78.5,
+                "promedio_seguimiento": 3.1,
+                "nota_parcial_1": 2.8,
+                "inicios_sesion_plataforma": 45,
+                "uso_tutorias": 2
             }
         }
 
 
 class PredictionOutput(BaseModel):
-    probabilidad_riesgo: float = Field(..., ge=0, le=1)
-    porcentaje_riesgo: float = Field(..., ge=0, le=100)
-    nivel_riesgo: str = Field(..., description="ALTO, MEDIO, BAJO")
-    analisis_ia: str
-    datos_radar: Dict
-    detalles_matematicos: Dict
-
-
-class CohortRiskInput(BaseModel):
-    cohort_key: Literal["first_cohort", "second_cohort", "third_cohort"] = Field(
+    """
+    DTO de Salida - Resultado de la predicción
+    """
+    probabilidad_riesgo: float = Field(
         ...,
-        description="Cohorte a evaluar",
+        ge=0,
+        le=1,
+        description="Probabilidad de riesgo (0-1)"
     )
-    nota_parcial: float = Field(..., ge=0, le=5, description="Nota del parcial del cohorte (0-5)")
-    promedio_seguimiento: float = Field(
-        ..., ge=0, le=5, description="Promedio de actividades de seguimiento del cohorte (0-5)"
+    porcentaje_riesgo: float = Field(
+        ...,
+        ge=0,
+        le=100,
+        description="Porcentaje de riesgo (0-100)"
     )
-    porcentaje_asistencia: float = Field(
-        ..., ge=0, le=100, description="Porcentaje de asistencia del cohorte (0-100)"
+    nivel_riesgo: str = Field(
+        ...,
+        description="Nivel de riesgo: ALTO, MEDIO, BAJO"
+    )
+    analisis_ia: str = Field(
+        ...,
+        description="Análisis personalizado con consejos"
+    )
+    datos_radar: Dict = Field(
+        ...,
+        description="Datos para gráfico de radar comparativo"
+    )
+    detalles_matematicos: Dict = Field(
+        ...,
+        description="Detalles del cálculo matemático (transparencia)"
     )
 
-
-class CohortRiskOutput(BaseModel):
-    cohort_key: str
-    cohort_name: str
-    probabilidad_riesgo: float = Field(..., ge=0, le=1)
-    porcentaje_riesgo: float = Field(..., ge=0, le=100)
-    nivel_riesgo: str = Field(..., description="ALTO, MEDIO, BAJO")
-    datos_cohorte: Dict
-    detalles_modelo: Dict
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "probabilidad_riesgo": 0.65,
+                "porcentaje_riesgo": 65.0,
+                "nivel_riesgo": "MEDIO",
+                "analisis_ia": "⚠️ **SITUACIÓN DE RIESGO MODERADO**...",
+                "datos_radar": {
+                    "labels": ["Asistencia (%)", "Seguimiento", "Parcial 1", "Logins", "Tutorías"],
+                    "estudiante": [78.5, 3.1, 2.8, 45, 2],
+                    "promedio_aprobado": [85.0, 3.8, 3.5, 50, 5]
+                },
+                "detalles_matematicos": {
+                    "formula_logit": "z = β₀ + Σ(βᵢ × xᵢ)",
+                    "valor_z": 0.619,
+                    "coeficientes": [-0.35, 0.28, 0.52, 0.15, -0.22]
+                }
+            }
+        }
 
 
 class ChatInput(BaseModel):
-    pregunta: str
-    datos_estudiante: StudentInput
-    prediccion_actual: Dict | None = None
+    """
+    DTO de Entrada - Datos para el chat consejero
+    """
+    pregunta: str = Field(
+        ...,
+        description="Pregunta del estudiante"
+    )
+    datos_estudiante: StudentInput = Field(
+        ...,
+        description="Datos actuales del estudiante"
+    )
+    prediccion_actual: Dict = Field(
+        None,
+        description="Predicción actual si existe"
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "pregunta": "¿Cómo puedo mejorar mi nota?",
+                "datos_estudiante": {
+                    "promedio_asistencia": 78.5,
+                    "promedio_seguimiento": 3.1,
+                    "nota_parcial_1": 2.8,
+                    "inicios_sesion_plataforma": 45,
+                    "uso_tutorias": 2
+                },
+                "prediccion_actual": {
+                    "porcentaje_riesgo": 65.0
+                }
+            }
+        }
 
 
 class ChatOutput(BaseModel):
-    respuesta: str
+    """
+    DTO de Salida - Respuesta del chat
+    """
+    respuesta: str = Field(
+        ...,
+        description="Respuesta generada por el consejero virtual"
+    )
+

@@ -24,7 +24,6 @@ from app.domain.enums import RoleEnum
 from app.infrastructure.models.course import Course
 from app.infrastructure.models.enrollment import Enrollment
 from app.infrastructure.models.program import Program
-from app.infrastructure.models.subject import Subject
 from app.infrastructure.models.user import User
 from app.infrastructure.repositories.user_repository import UserRepository
 
@@ -37,7 +36,6 @@ from app.infrastructure.repositories.user_repository import UserRepository
 
 _TABLES = [
     Program.__table__,
-    Subject.__table__,
     User.__table__,
     Course.__table__,
     Enrollment.__table__,
@@ -132,25 +130,16 @@ def _make_program() -> Program:
     )
 
 
-def _make_subject(program_id: uuid.UUID) -> Subject:
+def _make_course(program_id: uuid.UUID) -> Course:
+    """Create a Course ORM instance linked to a program."""
     uid = uuid.uuid4()
-    return Subject(
+    return Course(
         id=uid,
         code=f"CS{uid.hex[:6].upper()}",
         name="Test Course",
         credits=3,
-        program_id=program_id,
-        created_at=_now(),
-    )
-
-
-def _make_course(subject_id: uuid.UUID) -> Course:
-    """Create a Course ORM section linked to a subject."""
-    return Course(
-        id=uuid.uuid4(),
-        subject_id=subject_id,
-        section="A",
         academic_period="2025-I",
+        program_id=program_id,
         created_at=_now(),
     )
 
@@ -190,11 +179,7 @@ async def test_professor_only_sees_enrolled_students(
         session.add(program)
         session.flush()
 
-        subject = _make_subject(program.id)
-        session.add(subject)
-        session.flush()
-
-        course = _make_course(subject.id)
+        course = _make_course(program.id)
         course.professor_id = professor.id
         session.add(course)
 

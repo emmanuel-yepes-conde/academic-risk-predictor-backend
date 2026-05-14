@@ -24,7 +24,6 @@ from app.application.schemas.user import UserCreate, UserUpdate
 from app.domain.enums import OperationEnum, RoleEnum
 from app.infrastructure.models.audit_log import AuditLog
 from app.infrastructure.models.course import Course
-from app.infrastructure.models.subject import Subject
 from app.infrastructure.models.user import User
 from app.infrastructure.repositories.course_repository import CourseRepository
 from app.infrastructure.repositories.consent_repository import ConsentRepository
@@ -59,12 +58,16 @@ user_update_strategy = st.builds(
 
 course_create_strategy = st.builds(
     CourseCreate,
-    subject_id=st.uuids(),
-    section=st.text(
+    code=st.text(
         min_size=1,
-        max_size=8,
-        alphabet=st.characters(whitelist_categories=("Lu", "Ll", "Nd")),
+        max_size=20,
+        alphabet=st.characters(
+            whitelist_categories=("Lu", "Ll", "Nd"),
+            whitelist_characters="-_",
+        ),
     ),
+    name=st.text(min_size=1, max_size=100),
+    credits=st.integers(min_value=1, max_value=10),
     academic_period=st.text(min_size=1, max_size=20),
 )
 
@@ -101,16 +104,6 @@ def _make_session(entity_type: type) -> tuple[AsyncMock, list[AuditLogCreate]]:
     async def _execute(stmt, *args, **kwargs):
         result = MagicMock()
         result.scalar_one_or_none.return_value = stored_entity[0] if stored_entity else None
-        if entity_type is Course and stored_entity:
-            course = stored_entity[0]
-            subject = Subject(
-                id=course.subject_id,
-                code="TST101",
-                name="Test Subject",
-                credits=3,
-                program_id=uuid.uuid4(),
-            )
-            result.first.return_value = (course, subject)
         return result
 
     mock_session.execute = AsyncMock(side_effect=_execute)
@@ -274,9 +267,8 @@ async def test_course_create_audit_log_has_correct_content(course_data: CourseCr
     assert log.record_id == created.id
     assert log.previous_data is None
     assert log.new_data is not None
-    assert log.new_data.get("subject_id") == str(course_data.subject_id)
-    assert log.new_data.get("section") == course_data.section
-    assert log.new_data.get("academic_period") == course_data.academic_period
+    assert log.new_data.get("code") == course_data.code
+    assert log.new_data.get("name") == course_data.name
 
 
 # ---------------------------------------------------------------------------

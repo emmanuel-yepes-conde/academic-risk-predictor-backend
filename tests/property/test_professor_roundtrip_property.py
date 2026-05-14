@@ -67,9 +67,11 @@ def _make_course(course_id: UUID, program_id: UUID, code: str, name: str) -> Cou
     """Create a Course ORM object."""
     return Course(
         id=course_id,
-        subject_id=program_id,
-        section=code[:8],
+        code=code,
+        name=name,
+        credits=3,
         academic_period="2026-1",
+        program_id=program_id,
         professor_id=None,
         created_at=datetime.now(timezone.utc),
     )
@@ -78,9 +80,6 @@ def _make_course(course_id: UUID, program_id: UUID, code: str, name: str) -> Cou
 def _build_service_for_roundtrip(
     professor: User,
     course: Course,
-    course_code: str,
-    course_name: str,
-    program_id: UUID,
 ):
     """
     Build a ProfessorCourseService with a mocked session that simulates:
@@ -113,13 +112,11 @@ def _build_service_for_roundtrip(
             compiled_str = str(stmt)
 
         if phase["current"] == "assign":
-            if "courses" in compiled_str:
-                return FakeScalarResult(course)
+            # assign_professor issues 1 query:
+            #   select(User) — professor lookup
             return FakeScalarResult(professor)
 
         elif phase["current"] == "get_professor":
-            if "courses" in compiled_str:
-                return FakeScalarResult(course)
             # get_course_professor: select(User).where(User.id == course.professor_id)
             if course.professor_id is not None:
                 return FakeScalarResult(professor)
@@ -147,21 +144,7 @@ def _build_service_for_roundtrip(
     # For list_professor_courses, the service delegates to _course_repo.listar_por_docente
     async def mock_listar_por_docente(docente_id):
         if course.professor_id is not None and course.professor_id == docente_id:
-            return [
-                CourseRead(
-                    id=course.id,
-                    subject_id=course.subject_id,
-                    section=course.section,
-                    academic_period=course.academic_period,
-                    professor_id=course.professor_id,
-                    status=course.status,
-                    created_at=course.created_at,
-                    code=course_code,
-                    name=course_name,
-                    credits=3,
-                    program_id=program_id,
-                )
-            ]
+            return [course]
         return []
 
     service._course_repo.listar_por_docente = AsyncMock(side_effect=mock_listar_por_docente)
@@ -216,9 +199,7 @@ async def test_professor_course_assignment_roundtrip(
     professor = _make_professor_user(professor_id)
     course = _make_course(course_id, program_id, course_code, course_name)
 
-    service, phase = _build_service_for_roundtrip(
-        professor, course, course_code, course_name, program_id
-    )
+    service, phase = _build_service_for_roundtrip(professor, course)
 
     # --- Step 1: Assign professor to course ---
     phase["current"] = "assign"

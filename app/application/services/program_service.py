@@ -68,11 +68,6 @@ class ProgramService:
 
         return ProgramRead.model_validate(program)
 
-    async def list_programs(self, skip: int = 0, limit: int = 100) -> list[ProgramRead]:
-        """Lista todos los programas académicos."""
-        programs = await self._repo.list_all(skip=skip, limit=limit)
-        return [ProgramRead.model_validate(p) for p in programs]
-
     async def get_program(self, program_id: UUID) -> ProgramRead:
         """
         Obtiene un programa por su ID.
@@ -84,15 +79,3 @@ class ProgramService:
         if program is None:
             raise HTTPException(status_code=404, detail="Programa no encontrado")
         return ProgramRead.model_validate(program)
-
-    async def delete_program(self, program_id: UUID) -> None:
-        """
-        Elimina un programa y todos sus recursos asociados en cascada:
-          - Cursos del programa
-          - Inscripciones de esos cursos
-          - student_profiles.program_id se pone en NULL (perfil se conserva)
-        Lanza HTTPException(404) si el programa no existe.
-        """
-        deleted = await self._repo.delete(program_id)
-        if not deleted:
-            raise HTTPException(status_code=404, detail="Programa no encontrado")

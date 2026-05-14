@@ -40,7 +40,6 @@ class IUserRepository(ABC):
         status: UserStatusEnum | None,
         skip: int,
         limit: int,
-        program_id: UUID | None = None,
     ) -> list[User]: ...
 
     @abstractmethod
@@ -49,20 +48,10 @@ class IUserRepository(ABC):
         role: RoleEnum | None,
         professor_id: UUID | None,
         status: UserStatusEnum | None,
-        program_id: UUID | None = None,
     ) -> int: ...
 
     @abstractmethod
     async def update(self, id: UUID, data: UserUpdate) -> User | None: ...
 
     @abstractmethod
-    async def update_from_dict(self, id: UUID, data: dict[str, Any]) -> User | None: ...
-
-    @abstractmethod
-    async def update_fields(self, id: UUID, fields: dict[str, Any]) -> User | None: ...
-
-    @abstractmethod
     async def update_status(self, id: UUID, status: UserStatusEnum) -> User | None: ...
-
-    @abstractmethod
-    async def get_audit_history(self, record_id: UUID) -> list[Any]: ...

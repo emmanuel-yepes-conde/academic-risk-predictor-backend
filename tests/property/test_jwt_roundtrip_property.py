@@ -13,9 +13,8 @@ values.
 
 **Property 2 — Claims Completeness (Validates: Requirements 2.1, 2.5):**
 Verifies that for any user (UUID, RoleEnum), created access tokens contain
-exactly the claims ``sub``, ``role``, ``full_name``, ``type`` (= "access"),
-``exp``, and ``iat``; refresh tokens contain the same set with ``type`` =
-"refresh".
+exactly the claims ``sub``, ``role``, ``type`` (= "access"), ``exp``, and
+``iat``; refresh tokens contain the same set with ``type`` = "refresh".
 No extra claims are present.
 """
 
@@ -141,7 +140,7 @@ def test_roundtrip_preserves_claims_for_any_token_type(
 # Property 2: Token Claims Completeness
 # ---------------------------------------------------------------------------
 
-_EXPECTED_CLAIMS = {"sub", "role", "full_name", "type", "exp", "iat"}
+_EXPECTED_CLAIMS = {"sub", "role", "type", "exp", "iat"}
 
 
 @h_settings(max_examples=100)
@@ -153,10 +152,10 @@ def test_access_token_contains_exactly_required_claims(
     **Validates: Requirements 2.1, 2.5**
 
     Property 2 (access): For any valid UUID and RoleEnum, an access token
-    SHALL contain exactly the claims ``sub``, ``role``, ``full_name``,
-    ``type``, ``exp``, and ``iat`` — no more, no less. The ``type`` claim
-    SHALL equal "access", ``sub`` SHALL match the user UUID, and ``role``
-    SHALL match the user's role.
+    SHALL contain exactly the claims ``sub``, ``role``, ``type``, ``exp``,
+    and ``iat`` — no more, no less. The ``type`` claim SHALL equal "access",
+    ``sub`` SHALL match the user UUID, and ``role`` SHALL match the user's
+    role.
     """
     svc = _make_token_service()
     token = svc.create_access_token(user_id, role)
@@ -172,7 +171,6 @@ def test_access_token_contains_exactly_required_claims(
     # Verify claim values
     assert raw_claims["sub"] == str(user_id)
     assert raw_claims["role"] == role.value
-    assert raw_claims["full_name"] == ""
     assert raw_claims["type"] == "access"
     assert isinstance(raw_claims["exp"], int)
     assert isinstance(raw_claims["iat"], int)
@@ -187,9 +185,8 @@ def test_refresh_token_contains_exactly_required_claims(
     **Validates: Requirements 2.1, 2.5**
 
     Property 2 (refresh): For any valid UUID and RoleEnum, a refresh token
-    SHALL contain exactly the claims ``sub``, ``role``, ``full_name``,
-    ``type``, ``exp``, and ``iat`` — no more, no less. The ``type`` claim
-    SHALL equal "refresh".
+    SHALL contain exactly the claims ``sub``, ``role``, ``type``, ``exp``,
+    and ``iat`` — no more, no less. The ``type`` claim SHALL equal "refresh".
     """
     svc = _make_token_service()
     token = svc.create_refresh_token(user_id, role)
@@ -202,7 +199,6 @@ def test_refresh_token_contains_exactly_required_claims(
 
     assert raw_claims["sub"] == str(user_id)
     assert raw_claims["role"] == role.value
-    assert raw_claims["full_name"] == ""
     assert raw_claims["type"] == "refresh"
     assert isinstance(raw_claims["exp"], int)
     assert isinstance(raw_claims["iat"], int)

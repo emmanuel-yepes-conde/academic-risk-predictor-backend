@@ -22,19 +22,22 @@ class TestICourseRepositoryInterface:
         """A concrete class implementing all abstract methods can be instantiated."""
 
         class ConcreteCourseRepo(ICourseRepository):
+            async def crear(self, asignatura):
+                ...
+
+            async def obtener_por_id(self, id):
+                ...
+
+            async def listar_por_docente(self, docente_id):
+                ...
+
+            async def listar_estudiantes_inscritos(self, course_id):
+                ...
+
+            async def listar_por_programa(self, program_id):
+                ...
+
             async def create(self, data):
-                ...
-
-            async def get_by_id(self, course_id):
-                ...
-
-            async def list_by_subject(self, subject_id):
-                ...
-
-            async def list_by_professor(self, professor_id):
-                ...
-
-            async def list_by_program(self, program_id):
                 ...
 
             async def update(self, course_id, data):
@@ -43,19 +46,13 @@ class TestICourseRepositoryInterface:
             async def get_by_code(self, code):
                 ...
 
-            async def list_all(self, skip, limit, status=None, subject_id=None):
+            async def list_all(self, skip, limit, status=None):
                 ...
 
-            async def count_all(self, status=None, subject_id=None):
+            async def count_all(self, status=None):
                 ...
 
             async def update_status(self, course_id, status):
-                ...
-
-            async def save_evaluation_config(self, course_id, config):
-                ...
-
-            async def list_enrolled_students(self, course_id):
                 ...
 
         repo = ConcreteCourseRepo()
@@ -65,7 +62,16 @@ class TestICourseRepositoryInterface:
         """Omitting 'listar_por_programa' prevents instantiation (Req 6.3)."""
 
         class IncompleteCourseRepo(ICourseRepository):
-            async def create(self, data):
+            async def crear(self, asignatura):
+                ...
+
+            async def obtener_por_id(self, id):
+                ...
+
+            async def listar_por_docente(self, docente_id):
+                ...
+
+            async def listar_estudiantes_inscritos(self, course_id):
                 ...
 
         with pytest.raises(TypeError):
@@ -78,21 +84,20 @@ class TestICourseRepositoryInterface:
         assert "listar_por_campus_y_programa" not in abstract_methods
 
     def test_required_abstract_methods(self):
-        """The interface must define the current section repository contract."""
+        """The interface must define exactly the 11 required methods (5 original + 6 CRUD)."""
         abstract_methods = ICourseRepository.__abstractmethods__
         expected = {
+            "crear",
+            "obtener_por_id",
+            "listar_por_docente",
+            "listar_estudiantes_inscritos",
+            "listar_por_programa",
             "create",
-            "get_by_id",
+            "update",
             "get_by_code",
-            "list_by_subject",
-            "list_by_professor",
-            "list_by_program",
             "list_all",
             "count_all",
-            "update",
             "update_status",
-            "save_evaluation_config",
-            "list_enrolled_students",
         }
         assert abstract_methods == expected
 

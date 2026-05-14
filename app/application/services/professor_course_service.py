@@ -5,7 +5,6 @@ y control de acceso RB-04.
 Requisitos: 3.5, 4.1, 4.2, 4.3, 4.4, 4.5, 5.1, 5.2, 6.1, 6.2, 6.3, 6.4, 8.1, 8.2, 8.3
 """
 
-import inspect
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -20,7 +19,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.models.enrollment import Enrollment
-from app.infrastructure.models.course import Course
 from app.infrastructure.models.user import User
 from app.infrastructure.repositories.audit_log_repository import AuditLogRepository
 from app.infrastructure.repositories.course_repository import CourseRepository
@@ -36,25 +34,6 @@ class ProfessorCourseService:
         self._session = session
         self._audit = AuditLogRepository(session)
         self._course_repo = CourseRepository(session)
-
-    async def _get_course_model(self, course_id: UUID) -> Course | None:
-        if hasattr(self, "_session") and self._session is not None:
-            result = await self._session.execute(select(Course).where(Course.id == course_id))
-            course = result.scalar_one_or_none()
-            if inspect.isawaitable(course):
-                course = await course
-            professor_id = getattr(course, "professor_id", None)
-            if course is not None and (
-                professor_id is None or isinstance(professor_id, UUID)
-            ):
-                return course
-
-        if hasattr(self, "_course_repo"):
-            course = await self._course_repo.obtener_por_id(course_id)
-            if inspect.isawaitable(course):
-                course = await course
-            return course
-        return None
 
     # ------------------------------------------------------------------
     # Asignación profesor-curso (directa sobre Course.professor_id)
@@ -73,7 +52,7 @@ class ProfessorCourseService:
         Requisitos: 4.1, 4.2, 4.3, 4.4, 4.5, 8.1, 8.2, 8.3
         """
         # Verificar existencia del curso
-        course = await self._get_course_model(course_id)
+        course = await self._course_repo.obtener_por_id(course_id)
         if course is None:
             raise HTTPException(status_code=404, detail="Curso no encontrado")
 
@@ -137,7 +116,7 @@ class ProfessorCourseService:
         Requisitos: 5.1, 5.2
         """
         # Obtener el curso para leer su professor_id
-        course = await self._get_course_model(course_id)
+        course = await self._course_repo.obtener_por_id(course_id)
         if course is None or course.professor_id is None:
             raise HTTPException(
                 status_code=404,
@@ -178,7 +157,7 @@ class ProfessorCourseService:
 
         Requisitos: 6.1, 6.2, 6.3
         """
-        course = await self._get_course_model(course_id)
+        course = await self._course_repo.obtener_por_id(course_id)
         if course is None or course.professor_id != professor_id:
             raise HTTPException(
                 status_code=403,

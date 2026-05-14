@@ -21,8 +21,10 @@ from app.application.schemas.program import ProgramCreate
 
 ALL_REQUIRED_FIELDS = {
     "institution": "USBCO",
+    "degree_type": "PREG",
     "program_code": "M0200",
     "program_name": "Psicología",
+    "location": "SAN BENITO",
     "snies_code": 12345,
 }
 

@@ -69,7 +69,6 @@ def _make_user(
     user = MagicMock()
     user.id = user_id
     user.email = email
-    user.full_name = "Test User"
     user.password_hash = password_hash
     user.role = role
     user.status = status

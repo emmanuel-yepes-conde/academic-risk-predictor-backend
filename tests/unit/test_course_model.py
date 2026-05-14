@@ -31,9 +31,11 @@ class TestCourseModelProfessorId:
         """professor_id must accept None (nullable FK)."""
         course = Course(
             id=uuid.uuid4(),
-            subject_id=uuid.uuid4(),
-            section="A",
+            code="CS101",
+            name="Intro to CS",
+            credits=3,
             academic_period="2025-1",
+            program_id=uuid.uuid4(),
             professor_id=None,
             created_at=datetime.now(timezone.utc),
         )
@@ -44,9 +46,11 @@ class TestCourseModelProfessorId:
         prof_id = uuid.uuid4()
         course = Course(
             id=uuid.uuid4(),
-            subject_id=uuid.uuid4(),
-            section="A",
+            code="CS102",
+            name="Data Structures",
+            credits=4,
             academic_period="2025-1",
+            program_id=uuid.uuid4(),
             professor_id=prof_id,
             created_at=datetime.now(timezone.utc),
         )
@@ -56,9 +60,11 @@ class TestCourseModelProfessorId:
         """professor_id should default to None when not provided."""
         course = Course(
             id=uuid.uuid4(),
-            subject_id=uuid.uuid4(),
-            section="A",
+            code="CS103",
+            name="Algorithms",
+            credits=3,
             academic_period="2025-1",
+            program_id=uuid.uuid4(),
             created_at=datetime.now(timezone.utc),
         )
         assert course.professor_id is None
@@ -77,8 +83,6 @@ class TestCourseReadSchema:
 
         data = CourseRead(
             id=uuid.uuid4(),
-            subject_id=uuid.uuid4(),
-            section="A",
             code="CS101",
             name="Intro to CS",
             credits=3,
@@ -97,8 +101,6 @@ class TestCourseReadSchema:
         prof_id = uuid.uuid4()
         data = CourseRead(
             id=uuid.uuid4(),
-            subject_id=uuid.uuid4(),
-            section="A",
             code="CS101",
             name="Intro to CS",
             credits=3,
@@ -117,8 +119,6 @@ class TestCourseReadSchema:
         prof_id = uuid.uuid4()
         data = CourseRead(
             id=uuid.uuid4(),
-            subject_id=uuid.uuid4(),
-            section="A",
             code="CS101",
             name="Intro to CS",
             credits=3,
@@ -134,25 +134,24 @@ class TestCourseReadSchema:
 
 
 class TestCourseCreateSchema:
-    """Verify CourseCreate matches the section-based course contract."""
+    """Verify CourseCreate does NOT include professor_id (Req 10.2)."""
 
-    def test_course_create_has_current_fields(self):
-        """CourseCreate declares section fields and optional professor_id."""
-        assert {"subject_id", "section", "academic_period", "professor_id"}.issubset(
-            CourseCreate.model_fields
-        )
+    def test_course_create_does_not_have_professor_id(self):
+        """CourseCreate must not declare a professor_id field."""
+        assert "professor_id" not in CourseCreate.model_fields
 
-    def test_course_create_accepts_optional_professor_id(self):
-        """CourseCreate may assign an initial professor to the section."""
-        professor_id = uuid.uuid4()
+    def test_course_create_ignores_professor_id_in_input(self):
+        """CourseCreate must ignore professor_id even if provided in input data."""
         data = CourseCreate(
-            subject_id=uuid.uuid4(),
-            section="A",
+            code="CS101",
+            name="Intro to CS",
+            credits=3,
             academic_period="2025-1",
-            professor_id=professor_id,
+            program_id=uuid.uuid4(),
+            professor_id=uuid.uuid4(),  # type: ignore[call-arg]
         )
         dumped = data.model_dump()
-        assert dumped["professor_id"] == professor_id
+        assert "professor_id" not in dumped
 
 
 class TestProfessorAssignmentReadSchema:

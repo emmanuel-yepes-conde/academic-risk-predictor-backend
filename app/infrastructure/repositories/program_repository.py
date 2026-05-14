@@ -93,28 +93,3 @@ class ProgramRepository(IProgramRepository):
             select(Program).where(Program.snies_code == snies_code)
         )
         return result.scalar_one_or_none()
-
-    async def delete(self, program_id: UUID) -> bool:
-        """
-        Elimina un programa por ID y registra un audit log DELETE.
-        Retorna True si existía y fue eliminado, False si no existía.
-        Gracias a ON DELETE CASCADE (migración 0013), PostgreSQL elimina
-        automáticamente los cursos y sus inscripciones asociadas.
-        """
-        program = await self.get_by_id(program_id)
-        if program is None:
-            return False
-
-        snapshot = {
-            k: str(v) if not isinstance(v, (str, int, float, bool, type(None))) else v
-            for k, v in program.model_dump().items()
-        }
-        await self._session.delete(program)
-        await self._session.flush()
-        await self._audit.register(AuditLogCreate(
-            table_name="programs",
-            operation=OperationEnum.DELETE,
-            record_id=program_id,
-            previous_data=snapshot,
-        ))
-        return True

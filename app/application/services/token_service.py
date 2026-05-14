@@ -38,32 +38,30 @@ class TokenService:
     # Token creation
     # ------------------------------------------------------------------
 
-    def create_access_token(self, user_id: UUID, role: RoleEnum, full_name: str = "") -> str:
+    def create_access_token(self, user_id: UUID, role: RoleEnum) -> str:
         """Create a short-lived access token.
 
-        Claims: sub, role, full_name, type="access", exp, iat.
+        Claims: sub, role, type="access", exp, iat.
         """
         now = datetime.now(timezone.utc)
         claims = {
             "sub": str(user_id),
             "role": role.value,
-            "full_name": full_name,
             "type": "access",
             "iat": int(now.timestamp()),
             "exp": int((now + timedelta(minutes=self._access_expire_minutes)).timestamp()),
         }
         return jwt.encode(claims, self._secret_key, algorithm=self._algorithm)
 
-    def create_refresh_token(self, user_id: UUID, role: RoleEnum, full_name: str = "") -> str:
+    def create_refresh_token(self, user_id: UUID, role: RoleEnum) -> str:
         """Create a long-lived refresh token.
 
-        Claims: sub, role, full_name, type="refresh", exp, iat.
+        Claims: sub, role, type="refresh", exp, iat.
         """
         now = datetime.now(timezone.utc)
         claims = {
             "sub": str(user_id),
             "role": role.value,
-            "full_name": full_name,
             "type": "refresh",
             "iat": int(now.timestamp()),
             "exp": int((now + timedelta(days=self._refresh_expire_days)).timestamp()),
@@ -108,5 +106,4 @@ class TokenService:
             type=payload["type"],
             exp=datetime.fromtimestamp(payload["exp"], tz=timezone.utc),
             iat=datetime.fromtimestamp(payload["iat"], tz=timezone.utc),
-            full_name=payload.get("full_name", ""),
         )
