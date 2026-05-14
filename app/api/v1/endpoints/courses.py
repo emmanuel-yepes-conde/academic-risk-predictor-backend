@@ -1,7 +1,6 @@
 """
-CourseRouter — endpoints CRUD para cursos, asignación profesor-curso
-y acceso a estudiantes.
-Requisitos: 5.1, 5.2, 7.1–7.6, 8.1–8.5, 9.1–9.7, 10.1–10.8, 11.1–11.8
+CourseRouter — endpoints CRUD para secciones de materias,
+asignación profesor-sección y acceso a estudiantes.
 """
 
 from uuid import UUID
@@ -14,6 +13,7 @@ from app.application.schemas.course import (
     CourseRead,
     CourseStatusUpdate,
     CourseUpdate,
+    EvaluationConfigUpdate,
 )
 from app.application.schemas.professor_course import ProfessorAssign, ProfessorAssignmentRead
 from app.application.schemas.user import PaginatedResponse, UserRead
@@ -27,10 +27,6 @@ from app.infrastructure.repositories.course_repository import CourseRepository
 router = APIRouter()
 
 
-# ---------------------------------------------------------------------------
-# Dependency helpers
-# ---------------------------------------------------------------------------
-
 def _get_course_service(
     session: AsyncSession = Depends(get_session),
 ) -> CourseService:
@@ -43,35 +39,31 @@ def _get_professor_course_service(
     return ProfessorCourseService(session)
 
 
-# ===========================================================================
-# CRUD endpoints — deben ir ANTES de las rutas parametrizadas existentes
-# ===========================================================================
-
 @router.get(
     "/courses",
     response_model=PaginatedResponse[CourseRead],
     status_code=200,
-    summary="Listar cursos con paginación",
-    description="Retorna una lista paginada de cursos. Por defecto solo muestra cursos ACTIVE.",
-    tags=["Cursos"],
+    summary="Listar secciones con paginación",
+    description="Retorna secciones (grupos) con datos de la materia denormalizados.",
+    tags=["Secciones"],
 )
 async def list_courses(
-    status: CourseStatusEnum | None = None,
+    status: CourseStatusEnum | None = Query(None),
+    subject_id: UUID | None = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     current_user: CurrentUser = Depends(get_current_user),
     service: CourseService = Depends(_get_course_service),
 ) -> PaginatedResponse[CourseRead]:
-    return await service.list_courses(status, skip, limit)
+    return await service.list_courses(status, skip, limit, subject_id)
 
 
 @router.get(
     "/courses/{course_id}",
     response_model=CourseRead,
     status_code=200,
-    summary="Obtener un curso por ID",
-    description="Retorna los datos de un curso específico, o 404 si no existe.",
-    tags=["Cursos"],
+    summary="Obtener una sección por ID",
+    tags=["Secciones"],
 )
 async def get_course(
     course_id: UUID,
@@ -85,9 +77,13 @@ async def get_course(
     "/courses",
     response_model=CourseRead,
     status_code=201,
-    summary="Crear un curso",
-    description="Crea un nuevo curso. Requiere rol ADMIN. Valida unicidad de code.",
-    tags=["Cursos"],
+    summary="Crear una sección",
+    description=(
+        "Crea una sección de una materia para un período académico. "
+        "Requiere subject_id, section (ej. 'A'), academic_period. "
+        "Requiere rol ADMIN."
+    ),
+    tags=["Secciones"],
 )
 async def create_course(
     body: CourseCreate,
@@ -101,10 +97,9 @@ async def create_course(
     "/courses/{course_id}",
     response_model=CourseRead,
     status_code=200,
-    summary="Actualizar parcialmente un curso",
-    description="Actualiza los campos proporcionados de un curso existente. "
-                "Requiere rol ADMIN. Valida unicidad de code.",
-    tags=["Cursos"],
+    summary="Actualizar parcialmente una sección",
+    description="Actualiza section, academic_period o professor_id. Requiere rol ADMIN.",
+    tags=["Secciones"],
 )
 async def update_course(
     course_id: UUID,
@@ -116,12 +111,28 @@ async def update_course(
 
 
 @router.patch(
+    "/courses/{course_id}/evaluation-config",
+    response_model=CourseRead,
+    status_code=200,
+    summary="Guardar distribución de evaluación de una sección",
+    description="Persiste la configuración de cortes y componentes. Requiere rol PROFESSOR o ADMIN.",
+    tags=["Secciones"],
+)
+async def save_evaluation_config(
+    course_id: UUID,
+    body: EvaluationConfigUpdate,
+    current_user: CurrentUser = Depends(require_roles(RoleEnum.PROFESSOR, RoleEnum.ADMIN)),
+    service: CourseService = Depends(_get_course_service),
+) -> CourseRead:
+    return await service.save_evaluation_config(course_id, body, current_user)
+
+
+@router.patch(
     "/courses/{course_id}/status",
     response_model=CourseRead,
     status_code=200,
-    summary="Cambiar estado de un curso (soft delete / reactivación)",
-    description="Cambia el estado de un curso a ACTIVE o INACTIVE. Requiere rol ADMIN.",
-    tags=["Cursos"],
+    summary="Cambiar estado de una sección",
+    tags=["Secciones"],
 )
 async def update_course_status(
     course_id: UUID,
@@ -129,23 +140,19 @@ async def update_course_status(
     current_user: CurrentUser = Depends(require_roles(RoleEnum.ADMIN)),
     service: CourseService = Depends(_get_course_service),
 ) -> CourseRead:
-    return await service.update_course_status(course_id, body.status)
+    return await service.update_course_status(course_id, body)
 
 
 # ===========================================================================
-# Asignación profesor-curso y acceso a estudiantes
+# Asignación profesor y acceso a estudiantes
 # ===========================================================================
 
 @router.post(
     "/courses/{course_id}/professor",
     response_model=ProfessorAssignmentRead,
     status_code=200,
-    summary="Asignar o reemplazar profesor de un curso",
-    description=(
-        "Asigna un profesor al curso indicado. Si el curso ya tiene un profesor "
-        "asignado, lo reemplaza. El usuario debe tener rol PROFESSOR."
-    ),
-    tags=["Cursos"],
+    summary="Asignar o reemplazar profesor de una sección",
+    tags=["Secciones"],
 )
 async def assign_professor_to_course(
     course_id: UUID,
@@ -159,12 +166,8 @@ async def assign_professor_to_course(
     "/courses/{course_id}/professor",
     response_model=UserRead,
     status_code=200,
-    summary="Obtener profesor asignado a un curso",
-    description=(
-        "Retorna los datos del profesor asignado al curso indicado, "
-        "o 404 si el curso no tiene profesor asignado."
-    ),
-    tags=["Cursos"],
+    summary="Obtener profesor asignado a una sección",
+    tags=["Secciones"],
 )
 async def get_course_professor(
     course_id: UUID,
@@ -177,8 +180,7 @@ async def get_course_professor(
     "/professors/{professor_id}/courses",
     response_model=list[CourseRead],
     status_code=200,
-    summary="Listar cursos asignados a un profesor",
-    description="Retorna la lista de cursos asignados al profesor indicado.",
+    summary="Listar secciones asignadas a un profesor",
     tags=["Profesores"],
 )
 async def list_courses_by_professor(
@@ -192,13 +194,8 @@ async def list_courses_by_professor(
     "/courses/{course_id}/students",
     response_model=list[UserRead],
     status_code=200,
-    summary="Listar estudiantes inscritos en un curso",
-    description=(
-        "Retorna los estudiantes inscritos en el curso indicado. "
-        "El profesor solicitante debe estar asignado al curso (RB-04). "
-        "Retorna 403 si el profesor no está asignado."
-    ),
-    tags=["Cursos"],
+    summary="Listar estudiantes inscritos en una sección",
+    tags=["Secciones"],
 )
 async def list_course_students(
     course_id: UUID,

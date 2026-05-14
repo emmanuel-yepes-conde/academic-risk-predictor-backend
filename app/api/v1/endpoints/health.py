@@ -25,7 +25,7 @@ async def health_check():
         - HTTP 200 con status "healthy" si la DB responde dentro del timeout.
         - HTTP 503 con status "unhealthy" si la DB no responde o supera el timeout.
     """
-    from app.services.ml_service import risk_service
+    from app.services.ml_service import get_risk_service
 
     db_status = "connected"
     overall_status = "healthy"
@@ -51,9 +51,9 @@ async def health_check():
     body = {
         "status": overall_status,
         "database": db_status,
-        "modelo_cargado": risk_service.model is not None,
-        "scaler_cargado": risk_service.scaler is not None,
-        "promedio_aprobados_cargado": risk_service.promedio_estudiantes_aprobados is not None,
+        "modelo_cargado": get_risk_service().model is not None,
+        "scaler_cargado": get_risk_service().scaler is not None,
+        "promedio_aprobados_cargado": get_risk_service().promedio_estudiantes_aprobados is not None,
         "version": settings.API_VERSION,
     }
 

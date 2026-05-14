@@ -1,652 +1,321 @@
-# Academic Risk Predictor Backend (MPRA)
+# Academic Risk Predictor — Backend
 
-Sistema de predicción de riesgo académico basado en Machine Learning para la detección temprana de deserción universitaria.
-
-## Tabla de Contenidos
-- [Descripción](#descripción)
-- [Arquitectura](#arquitectura)
-- [Estructura del Proyecto](#estructura-del-proyecto)
-- [Requisitos](#requisitos)
-- [Instalación](#instalación)
-- [Variables de Entorno](#variables-de-entorno)
-- [Base de Datos](#base-de-datos)
-- [Ejecución](#ejecución)
-- [Endpoints](#endpoints)
-- [Despliegue](#despliegue)
+API REST construida con **FastAPI + Python 3.13** que expone predicción de riesgo académico con ML, gestión de usuarios, cursos, programas universitarios y notificaciones por correo electrónico.
 
 ---
 
-## Descripción
+## Requisitos previos
 
-El **MPRA** utiliza un modelo de **Regresión Logística** (scikit-learn) para transformar variables académicas en una probabilidad de riesgo (0–1), permitiendo intervenciones pedagógicas tempranas.
-
-El modelo de datos sigue una relación simplificada **Programa → Curso**, donde cada programa académico contiene sus cursos directamente, sin jerarquías intermedias de universidad o campus.
-
-**Stack:**
-- Python 3.12 + FastAPI (async) + uvicorn
-- PostgreSQL 16 (persistencia relacional)
-- SQLAlchemy async + SQLModel (ORM)
-- Alembic (migraciones)
-- scikit-learn + joblib (ML)
-- Pydantic v2 + pydantic-settings
+| Herramienta | Versión mínima | Notas |
+|---|---|---|
+| Python | 3.13 | Usar pyenv si hay conflictos de versión |
+| Docker Desktop | cualquiera | Para levantar PostgreSQL |
+| Git | cualquiera | |
 
 ---
 
-## Arquitectura
+## 1. Clonar el proyecto
 
-El proyecto sigue **Clean Architecture** con tres capas bien definidas:
-
-```
-┌──────────────────────────────────────────┐
-│         Capa de Presentación             │
-│   app/api/v1/endpoints/                  │
-│   Manejo HTTP, validación Pydantic       │
-└──────────────────────────────────────────┘
-                    ↓
-┌──────────────────────────────────────────┐
-│         Capa de Aplicación               │
-│   app/application/services/             │
-│   app/application/schemas/              │
-│   Lógica de negocio, DTOs               │
-└──────────────────────────────────────────┘
-                    ↓
-┌──────────────────────────────────────────┐
-│         Capa de Dominio                  │
-│   app/domain/interfaces/                │
-│   app/domain/enums.py                   │
-│   Contratos (interfaces), enums         │
-└──────────────────────────────────────────┘
-                    ↓
-┌──────────────────────────────────────────┐
-│         Capa de Infraestructura          │
-│   app/infrastructure/models/            │
-│   app/infrastructure/repositories/     │
-│   ORM models, implementaciones de repo  │
-└──────────────────────────────────────────┘
+```bash
+git clone <repository-url>
+cd academic-risk-predictor-backend
 ```
 
 ---
 
-## Estructura del Proyecto
+## 2. Configurar variables de entorno
+
+```bash
+cp env.example .env
+```
+
+Edita `.env` con los siguientes valores. **Solo cambia lo marcado con ⚠️** si ejecutas en local:
+
+```env
+# Servidor
+HOST=localhost
+PORT=8001                          # ⚠️ El frontend espera puerto 8001
+
+# Producción / Vercel
+# Guarda el DNS del backend de Azure en Vercel como la URL base del frontend:
+# NEXT_PUBLIC_API_BASE_URL=https://<dns-de-azure>
+# o VITE_API_BASE_URL=https://<dns-de-azure>
+AZURE_BACKEND_DNS=<dns-de-azure>    # opcional en backend; se normaliza a https://
+PUBLIC_BACKEND_URL=https://<dns-de-azure>
+CORS_ORIGINS=http://localhost:3000,http://localhost:4321,http://localhost:5173
+CORS_ORIGIN_REGEX=https://.*\.vercel\.app
+
+# Base de datos — Docker (no cambiar si usas docker-compose)
+POSTGRES_USER=mpra_user
+POSTGRES_PASSWORD=mpra_password
+POSTGRES_DB=mpra_db
+
+# Conexión desde la app al contenedor
+DB_USER=mpra_user
+DB_PASSWORD=mpra_password
+DB_HOST=localhost
+DB_PORT=5433                       # ⚠️ Puerto externo del contenedor (ver docker-compose)
+DB_NAME=mpra_db
+DB_POOL_MIN=5
+DB_POOL_MAX=20
+DB_ECHO=false
+
+# JWT — ⚠️ Generar uno nuevo con: python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+JWT_SECRET_KEY=REEMPLAZAR_CON_CLAVE_SEGURA
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+REFRESH_TOKEN_EXPIRE_DAYS=7
+
+# ML
+MODEL_PATH=ml_models/modelo_logistico.joblib
+SCALER_PATH=ml_models/scaler.joblib
+DATASET_PATH=datasets/dataset_estudiantes_decimal.csv
+UMBRAL_RIESGO_ALTO=0.7
+UMBRAL_RIESGO_MEDIO=0.4
+
+# SMTP — credenciales reales en .env local, NUNCA en el repo
+SMTP_SERVER=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USERNAME=TU_CORREO@gmail.com
+SMTP_PASSWORD=TU_APP_PASSWORD_DE_GMAIL
+FROM_EMAIL=TU_CORREO@gmail.com
+FROM_NAME=Academic Risk Notifications
+
+# Logging
+LOG_LEVEL=info
+```
+
+> **Generar un JWT_SECRET_KEY nuevo:**
+> ```bash
+> python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+> ```
+
+---
+
+## 3. Levantar la base de datos con Docker
+
+```bash
+docker-compose up -d db
+```
+
+Esto levanta **PostgreSQL 16** en `localhost:5433` (puerto externo 5433 para no colisionar con instalaciones locales de Postgres).
+
+Verifica que esté corriendo:
+```bash
+docker ps
+# Debe aparecer: mpra_db   ->  0.0.0.0:5433->5432/tcp
+```
+
+---
+
+## 4. Crear entorno virtual e instalar dependencias
+
+```bash
+python3 -m venv venv
+source venv/bin/activate          # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+---
+
+## 5. Ejecutar migraciones de base de datos
+
+```bash
+source venv/bin/activate
+alembic upgrade head
+```
+
+Esto crea todas las tablas:
+- `users` — usuarios con roles (STUDENT, PROFESSOR, ADMIN)
+- `universities`, `campuses`, `programs`, `courses`
+- `enrollments`, `professor_courses`, `student_profiles`
+- `audit_logs`
+
+Verifica que se aplicaron las 5 migraciones:
+```bash
+alembic history
+# Debes ver: 0001 → 0002 → 0003 → 0004 → 0005 (head)
+```
+
+---
+
+## 6. Crear el usuario administrador inicial
+
+```bash
+source venv/bin/activate
+python3 scripts/seed_admin.py
+```
+
+Crea el usuario:
+| Email | Contraseña | Rol |
+|---|---|---|
+| `admin@universidad.edu` | `Admin123!` | ADMIN |
+
+> Ejecutar **una sola vez**. Si ya existe, el script no hace nada.
+
+---
+
+## 7. (Opcional) Poblar datos para reentrenamiento ML
+
+```bash
+python3 -m scripts.seed_training_program
+```
+
+Genera un programa completo (1º a 5º semestre), estudiantes, matrículas y `grades` en JSONB.
+Además, exporta/regenera `datasets/dataset_estudiantes_decimal.csv` para reentrenar el modelo.
+
+---
+
+## 8. Iniciar el servidor
+
+```bash
+source venv/bin/activate
+python3 -m uvicorn app.main:app --host localhost --port 8001 --reload
+```
+
+El servidor quedará disponible en:
+- API: http://localhost:8001
+- Swagger UI: http://localhost:8001/docs
+- ReDoc: http://localhost:8001/redoc
+- Health check: http://localhost:8001/health
+
+---
+
+## Conectar frontend en Vercel
+
+1. Despliega el backend en Azure con `./infra/deploy.sh`. Al final el script imprime la URL pública, por ejemplo `https://ca-mpra-prod.example.azurecontainerapps.io`.
+2. En Vercel, entra al proyecto frontend y agrega una variable de entorno:
+   - Next.js: `NEXT_PUBLIC_API_BASE_URL=https://<dns-de-azure>`
+   - Vite: `VITE_API_BASE_URL=https://<dns-de-azure>`
+3. Redeploy del frontend en Vercel para que la variable quede embebida en el build.
+4. Si usas dominio propio en Vercel, agrega ese origen exacto en el backend con `CORS_ORIGINS=https://tu-dominio.com,http://localhost:3000`. Los dominios `*.vercel.app` ya quedan cubiertos con `CORS_ORIGIN_REGEX`.
+
+La API mantiene `/api/v1` como prefijo para endpoints de negocio, así que el frontend debería construir URLs como `${API_BASE_URL}/api/v1/auth/login`.
+
+---
+
+## Estructura del proyecto
 
 ```
 academic-risk-predictor-backend/
 ├── app/
-│   ├── main.py                          # Entry point FastAPI
-│   ├── api/v1/endpoints/
-│   │   ├── health.py                    # GET /health
-│   │   ├── auth.py                      # POST /api/v1/login, /register, /refresh
-│   │   ├── prediction.py                # POST /api/v1/predict, /chat
-│   │   ├── users.py                     # CRUD /api/v1/users
-│   │   ├── programs.py                  # CRUD /api/v1/programs, GET by ID
-│   │   ├── courses.py                   # Asignación profesor-curso, estudiantes
-│   │   └── enrollments.py               # CRUD /api/v1/enrollments
-│   ├── application/
-│   │   ├── schemas/                     # DTOs Pydantic
-│   │   │   ├── user.py
-│   │   │   ├── consent.py
-│   │   │   ├── course.py
-│   │   │   ├── enrollment.py
-│   │   │   ├── program.py
-│   │   │   ├── professor_course.py
-│   │   │   └── audit_log.py
-│   │   └── services/                    # Lógica de negocio
-│   │       ├── user_service.py
-│   │       ├── auth_service.py
-│   │       ├── consent_service.py
-│   │       ├── enrollment_service.py
-│   │       ├── professor_course_service.py
-│   │       ├── token_service.py
-│   │       └── ml_service.py
+│   ├── main.py                        # Entry point FastAPI
 │   ├── core/
-│   │   ├── config.py                    # Settings (pydantic-settings)
-│   │   └── security.py
+│   │   ├── config.py                  # Settings (pydantic-settings)
+│   │   └── security.py                # bcrypt hash/verify
+│   ├── api/v1/endpoints/
+│   │   ├── auth.py                    # POST /auth/login, /auth/refresh, /auth/logout
+│   │   ├── users.py                   # CRUD /users
+│   │   ├── universities.py            # CRUD /universities
+│   │   ├── programs.py                # CRUD /programs
+│   │   ├── courses.py                 # CRUD /courses
+│   │   ├── prediction.py              # POST /predict, /chat
+│   │   ├── notifications.py           # POST /notifications/risk-alert, /predictor-reminder
+│   │   └── health.py                  # GET /health
+│   ├── application/
+│   │   ├── schemas/                   # DTOs Pydantic
+│   │   └── services/                  # Lógica de negocio
 │   ├── domain/
-│   │   ├── enums.py                     # RoleEnum, UserStatusEnum, OperationEnum, EnrollmentStatusEnum
-│   │   └── interfaces/                  # Contratos de repositorios
+│   │   ├── enums.py                   # RoleEnum, UserStatusEnum
+│   │   ├── exceptions.py
+│   │   ├── interfaces/                # Contratos de repositorios
+│   │   └── value_objects/
+│   │       └── token.py               # TokenPayload (incluye full_name)
 │   ├── infrastructure/
-│   │   ├── database.py                  # Engine async + get_session
-│   │   ├── models/                      # ORM SQLModel
-│   │   └── repositories/               # Implementaciones de repositorios
-│   └── schemas/
-│       └── student.py                   # DTOs ML (StudentInput, PredictionOutput)
-├── alembic/                             # Migraciones de base de datos
-│   └── versions/
-│       ├── 0001_initial_schema.py
-│       ├── 0002_add_user_status.py
-│       ├── 0003_add_programs_and_student_profiles.py
-│       ├── 0004_add_university_and_multi_university_support.py
-│       ├── 0005_add_campus_hierarchy.py
-│       ├── 0006_simplify_program_course_model.py
-│       ├── 0007_simplify_professor_course_model.py
-│       ├── 0008_add_course_status.py
-│       ├── 0009_drop_pensum_and_academic_group_from_programs.py
-│       ├── 0010_add_enrollment_status.py
-│       └── 0011_add_pending_completed_enrollment_status.py
-├── datasets/                            # Dataset de entrenamiento (.csv)
-├── ml_models/                           # Artefactos ML (.joblib, generados)
-├── tests/
-├── main.py                              # Wrapper raíz (compatibilidad despliegue)
+│   │   ├── database.py                # Engine async + get_session
+│   │   ├── models/                    # ORM SQLModel
+│   │   ├── repositories/              # Implementaciones de repos
+│   │   └── auth/                      # credential_provider.py
+│   └── services/
+│       └── email_service.py           # SMTP con templates HTML
+├── alembic/versions/
+│   ├── 0001_initial_schema.py
+│   ├── 0002_add_user_status.py
+│   ├── 0003_add_programs_and_student_profiles.py
+│   ├── 0004_add_university_and_multi_university_support.py
+│   └── 0005_add_campus_hierarchy.py
+├── datasets/
+│   └── dataset_estudiantes_decimal.csv
+├── ml_models/
+│   ├── modelo_logistico.joblib        # Generado automáticamente al iniciar
+│   └── scaler.joblib
+├── scripts/
+│   ├── seed_admin.py                  # Crea admin@universidad.edu
+│   ├── seed_training_program.py       # Seed masivo + export dataset de entrenamiento
+│   └── update_student_grades.py       # Ajuste manual de grades para un estudiante específico
+├── docker-compose.yml
 ├── requirements.txt
-├── Procfile
 ├── alembic.ini
 └── env.example
 ```
 
 ---
 
-## Requisitos
+## Endpoints principales
 
-- Python 3.12+
-- PostgreSQL 16
-- pip
-
----
-
-## Instalación
-
-```bash
-# 1. Clonar el repositorio
-git clone <repository-url>
-cd academic-risk-predictor-backend
-
-# 2. Crear entorno virtual
-python3 -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-
-# 3. Instalar dependencias
-pip3 install -r requirements.txt
-
-# 4. Configurar variables de entorno
-cp env.example .env
-# Editar .env con tus valores
-```
-
----
-
-## Variables de Entorno
-
-Copia `env.example` a `.env` y ajusta los valores:
-
-| Variable | Default | Descripción |
-|---|---|---|
-| `HOST` | `0.0.0.0` | Host del servidor |
-| `PORT` | `8000` | Puerto del servidor |
-| `CORS_ORIGINS` | `*` | Orígenes CORS permitidos |
-| `DB_USER` | `mpra_user` | Usuario PostgreSQL |
-| `DB_PASSWORD` | `mpra_secret` | Contraseña PostgreSQL |
-| `DB_HOST` | `localhost` | Host PostgreSQL |
-| `DB_PORT` | `5432` | Puerto PostgreSQL |
-| `DB_NAME` | `mpra_db` | Nombre de la base de datos |
-| `DATABASE_URL` | _(auto)_ | URL completa (sobreescribe DB_*) |
-| `DB_POOL_MIN` | `5` | Tamaño mínimo del pool |
-| `DB_POOL_MAX` | `20` | Tamaño máximo del pool |
-| `DB_ECHO` | `false` | Logging SQL de SQLAlchemy |
-| `MODEL_PATH` | `ml_models/modelo_logistico.joblib` | Ruta al modelo ML |
-| `SCALER_PATH` | `ml_models/scaler.joblib` | Ruta al scaler |
-| `DATASET_PATH` | `datasets/dataset_estudiantes_decimal.csv` | Dataset de entrenamiento |
-| `UMBRAL_RIESGO_ALTO` | `0.7` | Umbral riesgo alto |
-| `UMBRAL_RIESGO_MEDIO` | `0.4` | Umbral riesgo medio |
-
----
-
-## Base de Datos
-
-El proyecto usa **Alembic** para gestionar migraciones. Asegúrate de que PostgreSQL esté corriendo y la base de datos exista antes de migrar.
-
-```bash
-# Aplicar todas las migraciones
-alembic upgrade head
-
-# Crear una nueva migración
-alembic revision --autogenerate -m "descripcion_del_cambio"
-
-# Ver historial
-alembic history
-```
-
-### Modelo de Datos
-
-El sistema utiliza un modelo de datos simplificado con la relación directa **Programa → Curso**. Cada programa académico contiene cursos, y los perfiles de estudiantes se vinculan opcionalmente a un programa.
-
-### Diagrama ER
-
-```mermaid
-erDiagram
-    users {
-        uuid id PK
-        string email UK
-        string institutional_email UK
-        string full_name
-        string role
-        string status
-        bool ml_consent
-        string microsoft_oid
-        string google_oid
-        datetime created_at
-        datetime updated_at
-    }
-    programs {
-        uuid id PK
-        string institution
-        string degree_type
-        string program_code UK
-        string program_name
-        string location
-        int snies_code UK
-        datetime created_at
-    }
-    courses {
-        uuid id PK
-        string code UK
-        string name
-        int credits
-        string academic_period
-        uuid program_id FK
-        datetime created_at
-    }
-    student_profiles {
-        uuid id PK
-        uuid user_id FK
-        uuid program_id FK "nullable"
-        string student_institutional_id UK
-        string document_type
-        string document_number
-        datetime created_at
-        datetime updated_at
-    }
-    consents {
-        uuid id PK
-        uuid student_id FK
-        bool accepted
-        string terms_version
-        datetime accepted_at
-    }
-    enrollments {
-        uuid id PK
-        uuid student_id FK
-        uuid course_id FK
-        string status "PENDING | ACTIVE | COMPLETED | CANCELLED"
-        datetime enrollment_date
-        datetime updated_at
-    }
-    professor_courses {
-        uuid id PK
-        uuid professor_id FK
-        uuid course_id FK
-    }
-    audit_logs {
-        uuid id PK
-        uuid user_id FK
-        string operation
-        string table_name
-        jsonb payload
-        datetime created_at
-    }
-    programs ||--o{ courses : "tiene"
-    programs ||--o{ student_profiles : "pertenece a"
-    users ||--o{ student_profiles : "tiene"
-    users ||--o{ consents : "tiene"
-    users ||--o{ enrollments : "inscrito en"
-    users ||--o{ professor_courses : "dicta"
-    courses ||--o{ enrollments : "tiene"
-    courses ||--o{ professor_courses : "tiene"
-    users ||--o{ audit_logs : "genera"
-```
-
----
-
-## Ejecución
-
-```bash
-# Desarrollo (con reload)
-task dev
-
-# Producción (multi-worker)
-task start
-
-# Tests con cobertura
-task test
-
-# Aplicar migraciones
-task migrate
-```
-
-O directamente con uvicorn:
-```bash
-python3 -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-### Docker
-
-```bash
-docker build -t academic-risk-predictor .
-docker run -p 8000:8000 --env-file .env academic-risk-predictor
-```
-
-### Documentación interactiva (servidor corriendo)
-
-- Swagger UI: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
-
----
-
-## Endpoints
-
-### Health
-
+### Autenticación
 | Método | Ruta | Descripción |
 |---|---|---|
-| GET | `/health` | Estado del servicio, DB y modelo ML |
-
-Respuesta `200 healthy`:
-```json
-{
-  "status": "healthy",
-  "database": "connected",
-  "modelo_cargado": true,
-  "scaler_cargado": true,
-  "promedio_aprobados_cargado": true,
-  "version": "1.0.0"
-}
-```
-
----
-
-### Predicción ML
-
-| Método | Ruta | Descripción |
-|---|---|---|
-| POST | `/api/v1/predict` | Predicción de riesgo académico |
-| POST | `/api/v1/chat` | Chat con consejero académico virtual |
-
-#### `POST /api/v1/predict`
-
-Variables mínimas obligatorias (RB-01):
-
-```json
-{
-  "promedio_asistencia": 78.5,
-  "promedio_seguimiento": 3.1,
-  "nota_parcial_1": 2.8,
-  "inicios_sesion_plataforma": 45,
-  "uso_tutorias": 2
-}
-```
-
-Query param opcional: `?student_id=<uuid>` — si se provee, verifica consentimiento ML (RB-02).
-
-Respuesta:
-```json
-{
-  "probabilidad_riesgo": 0.65,
-  "porcentaje_riesgo": 65.0,
-  "nivel_riesgo": "MEDIO",
-  "analisis_ia": "...",
-  "datos_radar": { "labels": [...], "estudiante": [...], "promedio_aprobado": [...] },
-  "detalles_matematicos": { "formula_logit": "...", "valor_z": 0.619, "coeficientes": [...] }
-}
-```
-
-Umbrales de riesgo (RB-03):
-- Bajo: `< 0.4`
-- Medio: `0.4 – 0.7`
-- Alto: `> 0.7`
-
----
+| POST | `/api/v1/auth/login` | Login con email + password → JWT |
+| POST | `/api/v1/auth/refresh` | Renovar access token con refresh token |
+| POST | `/api/v1/auth/logout` | Logout (stateless) |
 
 ### Usuarios
+| Método | Ruta | Auth | Descripción |
+|---|---|---|---|
+| GET | `/api/v1/users` | ADMIN, PROFESSOR | Listar usuarios (filtros + paginación, max 100) |
+| POST | `/api/v1/users` | ADMIN | Crear usuario |
+| GET | `/api/v1/users/{id}` | ADMIN, self, PROFESSOR | Ver usuario |
+| PATCH | `/api/v1/users/{id}` | ADMIN | Actualizar usuario |
+| PATCH | `/api/v1/users/{id}/status` | ADMIN | Activar/desactivar |
 
+### Predicción ML
 | Método | Ruta | Descripción |
 |---|---|---|
-| GET | `/api/v1/users` | Listar usuarios (filtros + paginación) |
-| POST | `/api/v1/users` | Crear usuario |
-| GET | `/api/v1/users/{user_id}` | Obtener usuario por ID |
-| PATCH | `/api/v1/users/{user_id}` | Actualizar usuario (parcial) |
-| PATCH | `/api/v1/users/{user_id}/status` | Cambiar estado (ACTIVE/INACTIVE) |
+| POST | `/api/v1/predict` | Predicción de riesgo con notas por cohorte y total |
+| POST | `/api/v1/predict/cohort` | Predicción de riesgo de un cohorte (parcial + seguimiento + asistencia) |
+| POST | `/api/v1/chat` | Chat con consejero académico IA |
 
-Query params para `GET /api/v1/users`: `role`, `professor_id`, `status`, `skip` (default 0), `limit` (default 20, max 100).
-
-Roles disponibles: `STUDENT`, `PROFESSOR`, `ADMIN`
-
-Respuesta paginada:
-```json
-{
-  "data": [...],
-  "total": 42,
-  "skip": 0,
-  "limit": 20
-}
-```
-
----
-
-### Programas
-
+### Notificaciones (email)
 | Método | Ruta | Descripción |
 |---|---|---|
-| GET | `/api/v1/programs/{program_id}` | Obtener un programa académico por ID |
-| GET | `/api/v1/programs/{program_id}/courses` | Listar cursos de un programa (404 si no existe) |
-
-#### `GET /api/v1/programs/{program_id}`
-
-Retorna los datos de un programa académico por su ID. Accesible para cualquier usuario autenticado (STUDENT, PROFESSOR, ADMIN).
-
-Respuesta `200`:
-```json
-{
-  "id": "uuid",
-  "institution": "Universidad Ejemplo",
-  "degree_type": "Pregrado",
-  "program_code": "ING-SIS",
-  "program_name": "Ingeniería de Sistemas",
-  "location": "Bogotá",
-  "snies_code": 12345,
-  "created_at": "2025-01-01T00:00:00Z"
-}
-```
-
-Errores:
-- `404` — Programa no encontrado
-
-#### `GET /api/v1/programs/{program_id}/courses`
-
-Retorna los cursos pertenecientes al programa indicado. Retorna 404 con `"Programa no encontrado"` si el programa no existe.
-
-Respuesta `200`:
-```json
-[
-  {
-    "id": "uuid",
-    "code": "MAT101",
-    "name": "Cálculo I",
-    "credits": 4,
-    "academic_period": "2025-1",
-    "program_id": "uuid",
-    "created_at": "2025-01-01T00:00:00Z"
-  }
-]
-```
-
----
-
-### Cursos y Asignación Profesor-Curso
-
-| Método | Ruta | Descripción |
-|---|---|---|
-| POST | `/api/v1/courses/{course_id}/professor` | Asignar o reemplazar profesor de un curso |
-| GET | `/api/v1/courses/{course_id}/professor` | Obtener profesor asignado a un curso |
-| GET | `/api/v1/professors/{professor_id}/courses` | Listar cursos asignados a un profesor |
-| GET | `/api/v1/courses/{course_id}/students` | Listar estudiantes inscritos en un curso (RB-04) |
-
-#### `POST /api/v1/courses/{course_id}/professor`
-
-Asigna un profesor al curso indicado. Si el curso ya tiene un profesor asignado, lo reemplaza. El usuario debe tener rol `PROFESSOR`.
-
-Request body:
-```json
-{
-  "professor_id": "uuid"
-}
-```
-
-#### `GET /api/v1/courses/{course_id}/students`
-
-Retorna los estudiantes inscritos en el curso indicado. El profesor solicitante debe estar asignado al curso (RB-04). Retorna 403 si el profesor no está asignado.
-
-Query param: `professor_id` (obligatorio) — ID del profesor que solicita el acceso.
-
----
-
-### Inscripciones (Enrollments)
-
-| Método | Ruta | Rol requerido | Status | Descripción |
-|--------|------|---------------|--------|-------------|
-| POST | `/api/v1/enrollments` | ADMIN | 201 | Inscribir estudiante en curso |
-| PATCH | `/api/v1/enrollments/{enrollment_id}` | ADMIN | 200 | Cambiar curso de inscripción |
-| PATCH | `/api/v1/enrollments/{enrollment_id}/status` | ADMIN | 200 | Actualizar estado de inscripción |
-| GET | `/api/v1/enrollments/{enrollment_id}` | ADMIN | 200 | Detalle de inscripción |
-| GET | `/api/v1/students/{student_id}/enrollments` | STUDENT (auto-acceso), ADMIN, PROFESSOR | 200 | Listar inscripciones de un estudiante |
-
-#### `POST /api/v1/enrollments`
-
-Inscribe un estudiante en un curso. Si ya existe una inscripción cancelada para la misma combinación `(student_id, course_id)`, se reactiva en lugar de crear una nueva. Requiere rol ADMIN.
-
-Request body:
-```json
-{
-  "student_id": "uuid",
-  "course_id": "uuid"
-}
-```
-
-Respuesta `201`:
-```json
-{
-  "id": "uuid",
-  "student_id": "uuid",
-  "course_id": "uuid",
-  "status": "ACTIVE",
-  "enrollment_date": "2025-01-01T00:00:00Z",
-  "updated_at": "2025-01-01T00:00:00Z"
-}
-```
-
-Errores:
-- `422` — El usuario no existe o no tiene rol de estudiante
-- `404` — Curso no encontrado
-- `409` — El estudiante ya está inscrito en este curso
-
-#### `PATCH /api/v1/enrollments/{enrollment_id}`
-
-Actualiza el curso de una inscripción existente. Valida que el curso destino exista, esté activo y que no exista una inscripción activa duplicada. Requiere rol ADMIN.
-
-Request body:
-```json
-{
-  "course_id": "uuid"
-}
-```
-
-Errores:
-- `404` — Inscripción no encontrada / Curso no encontrado
-- `409` — El estudiante ya está inscrito en el curso destino
-
-#### `PATCH /api/v1/enrollments/{enrollment_id}/status`
-
-Actualiza el estado de una inscripción a cualquier estado válido: PENDING, ACTIVE, COMPLETED o CANCELLED. El registro se preserva en la base de datos con el campo `status` actualizado. Requiere rol ADMIN.
-
-Request body:
-```json
-{
-  "status": "COMPLETED"
-}
-```
-
-Valores válidos para `status`: `PENDING`, `ACTIVE`, `COMPLETED`, `CANCELLED`.
-
-Errores:
-- `404` — Inscripción no encontrada
-- `422` — Valor de estado inválido
-
-#### `GET /api/v1/enrollments/{enrollment_id}`
-
-Retorna los datos completos de una inscripción específica. Requiere rol ADMIN.
-
-Errores:
-- `404` — Inscripción no encontrada
-
-#### `GET /api/v1/students/{student_id}/enrollments`
-
-Retorna la lista de inscripciones de un estudiante. Soporta auto-acceso para estudiantes: si el JWT tiene rol STUDENT y el `sub` coincide con el `student_id` del path, se permite el acceso y se retornan inscripciones en todos los estados (para la vista "Mi Progreso"). Si el usuario es PROFESSOR, solo retorna inscripciones en cursos asignados al profesor (RB-04). Si el usuario es ADMIN, retorna inscripciones activas por defecto. Requiere rol STUDENT (auto-acceso), ADMIN o PROFESSOR.
-
-Query params:
-- `status` (opcional): Filtrar por estado de inscripción. Valores válidos: `PENDING`, `ACTIVE`, `COMPLETED`, `CANCELLED`. Si no se proporciona, el comportamiento depende del rol (STUDENT: todos los estados, ADMIN: solo ACTIVE, PROFESSOR: filtrado por cursos del profesor).
-
-Respuesta `200`:
-```json
-[
-  {
-    "id": "uuid",
-    "student_id": "uuid",
-    "course_id": "uuid",
-    "status": "ACTIVE",
-    "enrollment_date": "2025-01-01T00:00:00Z",
-    "updated_at": "2025-01-01T00:00:00Z"
-  }
-]
-```
-
-Errores:
-- `403` — STUDENT intentando acceder a inscripciones de otro estudiante
-- `422` — Valor de `status` inválido
+| POST | `/api/v1/notifications/risk-alert` | Alerta de riesgo ALTO al profesor |
+| POST | `/api/v1/notifications/predictor-reminder` | Recordatorio motivacional al estudiante |
 
 ---
 
 ## Modelo ML
 
-- Artefactos en `ml_models/` (`.joblib`)
-- Al iniciar: si existen se cargan; si no, se entrena automáticamente desde el dataset CSV
-- Modelo cargado en memoria al inicio (RNF-05) — sin I/O por petición
-- Orden de features estricto: `promedio_asistencia`, `promedio_seguimiento`, `nota_parcial_1`, `inicios_sesion_plataforma`, `uso_tutorias`
+- Algoritmo: **Regresión Logística** (scikit-learn)
+- Entrenado con ~99.000 registros
+- Precisión: ~90%
+- Variables de entrada (orden estricto):
+  1. `nota_corte_1` — nota del corte 1 (0-5)
+  2. `nota_corte_2` — nota del corte 2 (0-5)
+  3. `nota_corte_final` — nota del corte final (0-5)
+  4. `nota_total` — nota total ponderada (0-5)
+- Si los archivos `.joblib` no existen, se entrenan automáticamente al iniciar
 
 ---
 
-## Tests
+## Solución de problemas frecuentes
 
-```bash
-task test
-# equivalente a: python3 -m pytest tests/ -v --cov=app
-```
+### Error: `connection refused` al conectar con la DB
+- Verifica que el contenedor Docker esté corriendo: `docker ps`
+- El puerto externo es **5433**, no 5432
+- Asegúrate de que `DB_PORT=5433` en `.env`
 
----
+### Error: `IllegalStateChangeError` de SQLAlchemy
+- Ya resuelto en `database.py` con `async with session.begin()`
+- Si aparece, verifica que estés usando Python 3.13 y la versión de SQLAlchemy en `requirements.txt`
 
-## Mejoras Pendientes
+### El modelo ML no carga
+- Verifica que existan `ml_models/modelo_logistico.joblib` y `ml_models/scaler.joblib`
+- Si no existen, el sistema los genera al arrancar desde el CSV en `datasets/`
+- Verifica las rutas en `.env`: `MODEL_PATH`, `SCALER_PATH`, `DATASET_PATH`
 
-### Seguridad
-- Rate limiting por IP/usuario en endpoints críticos
-- Validación de inputs más estricta (longitud máxima, caracteres permitidos)
-
-### Observabilidad
-- Logging estructurado (JSON) con correlación de requests
-- Métricas de rendimiento (latencia p95, throughput)
-- Health checks más detallados por subsistema
-
----
-
-## Despliegue
-
-### Despliegue en Azure con CI/CD (GitHub Actions)
-
-El proyecto cuenta con pipelines de **Integración Continua (CI)** y **Despliegue Continuo (CD)** automatizados mediante GitHub Actions. Se utilizan dos workflows separados:
-
-| Workflow | Archivo | Propósito |
-|----------|---------|-----------|
-| **CI** | `.github/workflows/ci.yml` | Ejecuta tests, cobertura de código y validación de la plantilla Bicep en cada Pull Request contra `main` o `develop` |
-| **CD** | `.github/workflows/cd.yml` | Despliega automáticamente a Azure Container Apps al fusionar código a `develop` (entorno dev) o `main` (entorno prod) |
-
-**Estrategia de ramas:**
-- Merge a `develop` → despliegue automático a **dev**
-- Merge a `main` → despliegue automático a **prod** (con ejecución de tests previos)
-
-> 📖 Para documentación detallada sobre CI/CD, configuración de GitHub Secrets, creación del Service Principal de Azure y ejecución manual de workflows, consulta [`infra/README.md`](infra/README.md).
+### Los correos no llegan
+- El SMTP usa Gmail App Password — funciona correctamente
+- Correos a dominios con **Microsoft Exchange** (universidades) pueden ir a spam
+- Para pruebas, usar una cuenta Gmail personal
+- Verificar carpeta de correo no deseado

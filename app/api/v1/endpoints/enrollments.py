@@ -3,13 +3,17 @@ EnrollmentRouter — endpoints CRUD para inscripciones de estudiantes en cursos.
 Requisitos: 1.1, 1.9, 2.1, 2.7, 3.1, 3.4, 4.1, 4.3, 5.1, 5.3
 """
 
+from decimal import Decimal
 from uuid import UUID
 
 import numpy as np
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.schemas.enrollment import (
+    CourseGradesStructureRead,
     EnrollmentCreate,
     EnrollmentRead,
     EnrollmentStatusUpdate,
@@ -21,8 +25,9 @@ from app.application.schemas.enrollment import (
 from app.application.services.enrollment_service import EnrollmentService
 from app.application.services.grade_service import (
     GradeService,
-    extract_nota_parcial_1,
-    extract_promedio_seguimiento,
+    extract_cohort_attendance_percentage,
+    extract_cohort_parcial,
+    extract_cohort_seguimiento,
 )
 from app.application.services.ml_service import MLApplicationService
 from app.application.services.consent_service import ConsentService
@@ -36,8 +41,17 @@ from app.domain.enums import EnrollmentStatusEnum, RoleEnum
 from app.infrastructure.database import get_session
 from app.infrastructure.repositories.consent_repository import ConsentRepository
 from app.infrastructure.repositories.enrollment_repository import EnrollmentRepository
-from app.schemas.student import PredictionOutput
-from app.services.ml_service import AcademicRiskService, risk_service
+from app.infrastructure.models.student_profile import StudentProfile
+from app.schemas.student import CohortRiskOutput, PredictionOutput
+from app.services.ml_service import AcademicRiskService, get_risk_service
+
+
+class StudentProfileRead(BaseModel):
+    semester:         int     | None
+    academic_year:    int     | None
+    enrolled_credits: Decimal | None
+
+    model_config = {"from_attributes": True}
 
 router = APIRouter()
 
@@ -61,7 +75,7 @@ def _get_grade_service(
 
 
 def _get_ml_service() -> AcademicRiskService:
-    return risk_service
+    return get_risk_service()
 
 
 def _get_ml_app_service(
@@ -162,6 +176,32 @@ async def get_enrollment(
 
 
 @router.get(
+    "/students/{student_id}/profile",
+    response_model=StudentProfileRead,
+    status_code=200,
+    summary="Perfil académico de un estudiante",
+    description=(
+        "Retorna datos del perfil académico del estudiante (semestre, año académico, "
+        "créditos matriculados). Retorna 404 si no existe perfil. "
+        "STUDENT: solo su propio perfil. ADMIN/PROFESSOR: acceso amplio."
+    ),
+    tags=["Inscripciones"],
+)
+async def get_student_profile(
+    student_id: UUID,
+    current_user: CurrentUser = Depends(require_student_self_or_roles),
+    session: AsyncSession = Depends(get_session),
+) -> StudentProfileRead:
+    result = await session.execute(
+        select(StudentProfile).where(StudentProfile.user_id == student_id)
+    )
+    profile = result.scalar_one_or_none()
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Perfil académico no encontrado")
+    return StudentProfileRead.model_validate(profile)
+
+
+@router.get(
     "/students/{student_id}/enrollments",
     response_model=list[EnrollmentRead],
     status_code=200,
@@ -191,6 +231,47 @@ async def list_student_enrollments(
 # ===========================================================================
 # Grades & Risk endpoints
 # ===========================================================================
+
+@router.get(
+    "/courses/{course_id}/grades-structure",
+    response_model=CourseGradesStructureRead,
+    status_code=200,
+    summary="Consultar estructura JSON de notas de un curso",
+    description=(
+        "Retorna la estructura completa del JSON de notas (grades) tomada de una "
+        "inscripción del curso. Se usa para persistir y restaurar la distribución "
+        "de cortes/actividades en frontend."
+    ),
+    tags=["Inscripciones"],
+)
+async def get_course_grades_structure(
+    course_id: UUID,
+    current_user: CurrentUser = Depends(get_current_user),
+    service: GradeService = Depends(_get_grade_service),
+) -> CourseGradesStructureRead:
+    grades = await service.get_course_grades_structure(course_id, current_user)
+    return CourseGradesStructureRead(course_id=course_id, grades=grades)
+
+
+@router.put(
+    "/courses/{course_id}/grades-structure",
+    response_model=CourseGradesStructureRead,
+    status_code=200,
+    summary="Guardar estructura JSON de notas en inscripciones del curso",
+    description=(
+        "Guarda la estructura completa del JSON de notas (grades) en la tabla "
+        "`enrollments` para todas las inscripciones del curso."
+    ),
+    tags=["Inscripciones"],
+)
+async def set_course_grades_structure(
+    course_id: UUID,
+    body: GradesUpdate,
+    current_user: CurrentUser = Depends(get_current_user),
+    service: GradeService = Depends(_get_grade_service),
+) -> CourseGradesStructureRead:
+    await service.set_course_grades_structure(course_id, body.grades, current_user)
+    return CourseGradesStructureRead(course_id=course_id, grades=body.grades)
 
 @router.get(
     "/enrollments/{enrollment_id}/grades",
@@ -244,10 +325,8 @@ async def set_enrollment_grades(
     status_code=200,
     summary="Calcular riesgo académico desde las notas de la inscripción",
     description=(
-        "Calcula el riesgo de reprobación del estudiante usando las notas registradas "
-        "en la inscripción. El sistema extrae automáticamente `nota_parcial_1` y "
-        "`promedio_seguimiento` del JSON de notas. El estudiante debe proveer "
-        "`promedio_asistencia`, `inicios_sesion_plataforma` y `uso_tutorias`. "
+        "Calcula el riesgo de reprobación del estudiante usando exclusivamente "
+        "las notas por cohorte y la nota total calculadas en la inscripción. "
         "Requiere consentimiento ML activo. "
         "STUDENT: solo puede calcular riesgo de sus propias inscripciones. "
         "PROFESSOR: solo puede calcular riesgo de estudiantes en sus cursos (RB-04). "
@@ -256,7 +335,6 @@ async def set_enrollment_grades(
 )
 async def calculate_enrollment_risk(
     enrollment_id: UUID,
-    body: RiskFromEnrollmentRequest,
     current_user: CurrentUser = Depends(get_current_user),
     grade_service: GradeService = Depends(_get_grade_service),
     ml: AcademicRiskService = Depends(_get_ml_service),
@@ -271,24 +349,38 @@ async def calculate_enrollment_risk(
             detail="No hay notas registradas para esta inscripción",
         )
 
-    # 2. Extraer features desde el JSON de notas
-    nota_parcial_1 = extract_nota_parcial_1(grades_data.grades)
-    promedio_seguimiento = extract_promedio_seguimiento(grades_data.grades)
+    # 2. Extraer features desde columnas calculadas de la inscripción
+    if (
+        grades_data.first_cohort_grade is None
+        or grades_data.second_cohort_grade is None
+        or grades_data.third_cohort_grade is None
+        or grades_data.final_grade is None
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Faltan notas por cohorte para calcular riesgo. "
+                "Verifica que estén registrados corte 1, corte 2, corte final y total."
+            ),
+        )
+
+    nota_corte_1 = float(grades_data.first_cohort_grade)
+    nota_corte_2 = float(grades_data.second_cohort_grade)
+    nota_corte_final = float(grades_data.third_cohort_grade)
+    nota_total = float(grades_data.final_grade)
 
     feature_vector = [
-        body.promedio_asistencia,
-        promedio_seguimiento,
-        nota_parcial_1,
-        float(body.inicios_sesion_plataforma),
-        float(body.uso_tutorias),
+        nota_corte_1,
+        nota_corte_2,
+        nota_corte_final,
+        nota_total,
     ]
 
     datos_estudiante = {
-        "promedio_asistencia": body.promedio_asistencia,
-        "promedio_seguimiento": promedio_seguimiento,
-        "nota_parcial_1": nota_parcial_1,
-        "inicios_sesion_plataforma": body.inicios_sesion_plataforma,
-        "uso_tutorias": body.uso_tutorias,
+        "nota_corte_1": nota_corte_1,
+        "nota_corte_2": nota_corte_2,
+        "nota_corte_final": nota_corte_final,
+        "nota_total": nota_total,
     }
 
     # 3. Predecir con verificación de consentimiento ML
@@ -310,21 +402,74 @@ async def calculate_enrollment_risk(
         nivel_riesgo=nivel_riesgo,
         analisis_ia=analisis_ia,
         datos_radar={
-            "labels": ["Asistencia (%)", "Seguimiento", "Parcial 1", "Logins", "Tutorías"],
+            "labels": ["Corte 1", "Corte 2", "Corte final", "Total"],
             "estudiante": [
-                body.promedio_asistencia,
-                promedio_seguimiento,
-                nota_parcial_1,
-                body.inicios_sesion_plataforma,
-                body.uso_tutorias,
+                nota_corte_1,
+                nota_corte_2,
+                nota_corte_final,
+                nota_total,
             ],
             "promedio_aprobado": [
-                promedio_aprobados["promedio_asistencia"],
-                promedio_aprobados["promedio_seguimiento"],
-                promedio_aprobados["nota_parcial_1"],
-                promedio_aprobados["inicios_sesion_plataforma"],
-                promedio_aprobados["uso_tutorias"],
+                promedio_aprobados["nota_corte_1"],
+                promedio_aprobados["nota_corte_2"],
+                promedio_aprobados["nota_corte_final"],
+                promedio_aprobados["nota_total"],
             ],
         },
         detalles_matematicos=detalles_matematicos,
+    )
+
+
+@router.post(
+    "/enrollments/{enrollment_id}/risk/cohort",
+    response_model=CohortRiskOutput,
+    status_code=200,
+    summary="Calcular riesgo por cohorte desde notas de la inscripción",
+    description=(
+        "Calcula riesgo de un cohorte específico usando su parcial, promedio "
+        "de seguimiento y asistencia del mismo cohorte. Requiere consentimiento ML activo."
+    ),
+)
+async def calculate_enrollment_cohort_risk(
+    enrollment_id: UUID,
+    cohort_key: str = Query(
+        ...,
+        description="Cohorte a evaluar: first_cohort, second_cohort o third_cohort",
+    ),
+    current_user: CurrentUser = Depends(get_current_user),
+    grade_service: GradeService = Depends(_get_grade_service),
+    ml: AcademicRiskService = Depends(_get_ml_service),
+    ml_app: MLApplicationService = Depends(_get_ml_app_service),
+) -> CohortRiskOutput:
+    grades_data = await grade_service.get_grades(enrollment_id, current_user)
+    if grades_data.grades is None:
+        raise HTTPException(
+            status_code=422,
+            detail="No hay notas registradas para esta inscripción",
+        )
+
+    nota_parcial = extract_cohort_parcial(grades_data.grades, cohort_key)
+    promedio_seguimiento = extract_cohort_seguimiento(grades_data.grades, cohort_key)
+    porcentaje_asistencia = extract_cohort_attendance_percentage(grades_data.grades, cohort_key)
+
+    result = await ml_app.predict_cohort_with_consent_check(
+        student_id=grades_data.student_id,
+        cohort_key=cohort_key,
+        nota_parcial=nota_parcial,
+        promedio_seguimiento=promedio_seguimiento,
+        porcentaje_asistencia=porcentaje_asistencia,
+    )
+
+    return CohortRiskOutput(
+        cohort_key=result["cohort_key"],
+        cohort_name=result["cohort_name"],
+        probabilidad_riesgo=result["probability"],
+        porcentaje_riesgo=result["probability"] * 100,
+        nivel_riesgo=result["risk_level"],
+        datos_cohorte={
+            "nota_parcial": nota_parcial,
+            "promedio_seguimiento": promedio_seguimiento,
+            "porcentaje_asistencia": porcentaje_asistencia,
+        },
+        detalles_modelo=result["component_scores"],
     )

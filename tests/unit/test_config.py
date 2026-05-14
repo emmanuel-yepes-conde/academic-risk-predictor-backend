@@ -10,6 +10,12 @@ import pytest
 from app.core.config import Settings
 
 
+class _SettingsNoEnv(Settings):
+    """Settings subclass that ignores .env for deterministic unit tests."""
+
+    model_config = {**Settings.model_config, "env_file": None}
+
+
 def make_settings(**kwargs) -> Settings:
     """Helper para crear Settings con valores controlados, sin leer .env."""
     base = dict(
@@ -18,9 +24,10 @@ def make_settings(**kwargs) -> Settings:
         DB_HOST="testhost",
         DB_PORT=5432,
         DB_NAME="testdb",
+        JWT_SECRET_KEY="test-secret-key-for-unit-tests",
     )
     base.update(kwargs)
-    return Settings.model_validate(base)
+    return _SettingsNoEnv.model_validate(base)
 
 
 class TestDatabaseURLConstruction:
@@ -91,3 +98,32 @@ class TestDatabaseURLPassthrough:
         explicit = "postgresql://sync_user:pass@host:5432/db"
         s = make_settings(DATABASE_URL=explicit)
         assert s.DATABASE_URL == explicit
+
+
+class TestServerURLSettings:
+    """Configuración de host local y URL pública del backend."""
+
+    def test_host_default_is_localhost(self):
+        s = make_settings()
+        assert s.HOST == "localhost"
+
+    def test_local_base_url_uses_localhost_for_wildcard_bind(self):
+        s = make_settings(HOST="0.0.0.0", PORT=8001)
+        assert s.get_local_base_url() == "http://localhost:8001"
+
+    def test_public_backend_url_is_derived_from_azure_dns(self):
+        s = make_settings(AZURE_BACKEND_DNS="ca-mpra-prod.azurecontainerapps.io")
+        assert s.PUBLIC_BACKEND_URL == "https://ca-mpra-prod.azurecontainerapps.io"
+
+    def test_public_backend_url_trims_trailing_slash(self):
+        s = make_settings(PUBLIC_BACKEND_URL="https://api.example.com/")
+        assert s.PUBLIC_BACKEND_URL == "https://api.example.com"
+
+    def test_cors_origin_regex_is_optional(self):
+        s = make_settings()
+        assert s.CORS_ORIGIN_REGEX is None
+
+    def test_cors_origin_regex_can_allow_vercel_previews(self):
+        regex = r"https://.*\.vercel\.app"
+        s = make_settings(CORS_ORIGIN_REGEX=regex)
+        assert s.CORS_ORIGIN_REGEX == regex
