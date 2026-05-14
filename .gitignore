@@ -11,8 +11,8 @@ env/
 ENV/
 .venv
 
-# Modelos entrenados (se generan automáticamente)
-ml_models/*.joblib
+# Modelos entrenados grandes (mantener los archivos pequeños del proyecto)
+# ml_models/*.joblib
 
 # IDEs
 .vscode/
