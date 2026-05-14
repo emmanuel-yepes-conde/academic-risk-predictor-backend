@@ -12,13 +12,15 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import httpx
+
+from app.core.config import settings
 from app.domain.enums import EnrollmentStatusEnum
 from app.infrastructure.models.course import Course
 from app.infrastructure.models.enrollment import Enrollment
 from app.infrastructure.models.student_profile import StudentProfile
 from app.infrastructure.models.subject import Subject
 from app.infrastructure.models.user import User
-from app.services.ml_service import get_risk_service
 
 # Estado de conversación por número de teléfono: phone -> session dict
 _sessions: Dict[str, dict] = {}
@@ -110,7 +112,7 @@ class WahaChatbotService:
             )
 
         enroll = enrollments[selection - 1]
-        analysis = self._run_prediction(enroll, student_name)
+        analysis = await self._run_prediction(enroll, student_name)
 
         footer = (
             "\n\n---\n"
@@ -158,7 +160,7 @@ class WahaChatbotService:
 
     # ─── Lógica de predicción ─────────────────────────────────────────────────
 
-    def _run_prediction(self, enroll: dict, student_name: str) -> str:
+    async def _run_prediction(self, enroll: dict, student_name: str) -> str:
         name = enroll["subject_name"]
         code = enroll["subject_code"]
         period = enroll["academic_period"]
@@ -176,9 +178,21 @@ class WahaChatbotService:
         ]
 
         if c1 is not None and c2 is not None and c3 is not None and final is not None:
-            result = get_risk_service().predict([c1, c2, c3, final])
-            prob = result["probability"]
-            nivel = result["risk_level"]
+            predict_url = f"{settings.get_public_base_url()}/api/v1/predict"
+            payload = {
+                "nota_corte_1": c1,
+                "nota_corte_2": c2,
+                "nota_corte_final": c3,
+                "nota_total": final,
+            }
+            print(f"[WAHA] Llamando predicción: POST {predict_url}", flush=True)
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(predict_url, json=payload)
+                response.raise_for_status()
+                result = response.json()
+
+            prob = result["probabilidad_riesgo"]
+            nivel = result["nivel_riesgo"]
             emoji = "🔴" if nivel == "ALTO" else "🟡" if nivel == "MEDIO" else "🟢"
 
             lines += [
