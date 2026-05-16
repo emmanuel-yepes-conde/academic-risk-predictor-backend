@@ -26,21 +26,21 @@ REFERRAL_TYPE_OPTIONS = [
 # ── Create ─────────────────────────────────────────────────────────────────────
 
 class ReferralCreate(BaseModel):
-    tipo_remision:      ReferralTypeEnum = Field(..., description="Tipo de remisión")
-    tipo_remision_otro: str | None       = Field(
+    referral_type:       ReferralTypeEnum = Field(..., description="Tipo de remisión")
+    referral_type_other: str | None       = Field(
         default=None,
         max_length=255,
-        description="Descripción libre cuando tipo_remision == 'Otros'",
+        description="Descripción libre cuando referral_type == 'Otros'",
     )
-    observaciones:  str  = Field(..., min_length=5, description="Observaciones del docente")
-    fecha_remision: date = Field(..., description="Fecha de la remisión (YYYY-MM-DD)")
+    observations:  str  = Field(..., min_length=5, description="Observaciones del docente")
+    referral_date: date = Field(..., description="Fecha de la remisión (YYYY-MM-DD)")
 
 
 # ── Update (consejero/profesor actualiza después) ─────────────────────────────
 
 class ReferralUpdate(BaseModel):
-    observaciones_remision: str | None      = Field(default=None)
-    asistio:                AsistioEnum | None = Field(default=None)
+    counselor_observations: str | None        = Field(default=None)
+    attended:               AsistioEnum | None = Field(default=None)
     status:                 ReferralStatusEnum | None = Field(default=None)
 
 
@@ -50,12 +50,12 @@ class ReferralRead(BaseModel):
     id:                     UUID
     enrollment_id:          UUID
     created_by:             UUID
-    tipo_remision:          ReferralTypeEnum
-    tipo_remision_otro:     str | None
-    observaciones:          str
-    observaciones_remision: str | None
-    fecha_remision:         date
-    asistio:                AsistioEnum
+    referral_type:          ReferralTypeEnum
+    referral_type_other:    str | None
+    observations:           str
+    counselor_observations: str | None
+    referral_date:          date
+    attended:               AsistioEnum
     status:                 ReferralStatusEnum
     created_at:             datetime
     updated_at:             datetime

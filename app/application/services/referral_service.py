@@ -74,16 +74,16 @@ class ReferralService:
             raise HTTPException(status_code=403, detail="Acceso denegado")
 
         referral = await self._repo.create({
-            "enrollment_id":      enrollment_id,
-            "created_by":         current_user.id,
-            "tipo_remision":      body.tipo_remision.value,
-            "tipo_remision_otro": body.tipo_remision_otro,
-            "observaciones":      body.observaciones,
-            "fecha_remision":     body.fecha_remision,
-            "asistio":            "Sin confirmar",
-            "status":             "PENDIENTE",
-            "created_at":         datetime.now(timezone.utc),
-            "updated_at":         datetime.now(timezone.utc),
+            "enrollment_id":         enrollment_id,
+            "created_by":            current_user.id,
+            "referral_type":         body.referral_type.value,
+            "referral_type_other":   body.referral_type_other,
+            "observations":          body.observations,
+            "referral_date":         body.referral_date,
+            "attended":              "Sin confirmar",
+            "status":                "PENDIENTE",
+            "created_at":            datetime.now(timezone.utc),
+            "updated_at":            datetime.now(timezone.utc),
         })
 
         # ── Notificaciones ACS (fire-and-forget, no bloquea la respuesta) ──
@@ -158,8 +158,8 @@ class ReferralService:
 
         fields = body.model_dump(exclude_unset=True)
         # Serializar enums a sus valores string para columnas VARCHAR
-        if "asistio" in fields and fields["asistio"] is not None:
-            fields["asistio"] = fields["asistio"].value if hasattr(fields["asistio"], "value") else fields["asistio"]
+        if "attended" in fields and fields["attended"] is not None:
+            fields["attended"] = fields["attended"].value if hasattr(fields["attended"], "value") else fields["attended"]
         if "status" in fields and fields["status"] is not None:
             fields["status"] = fields["status"].value if hasattr(fields["status"], "value") else fields["status"]
         updated = await self._repo.update(referral_id, fields)

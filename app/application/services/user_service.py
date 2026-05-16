@@ -2,7 +2,6 @@
 UserService — lógica de negocio para operaciones CRUD de usuarios.
 """
 
-import asyncio
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -34,14 +33,24 @@ class UserService:
         """
         Lista usuarios con filtros opcionales y paginación.
         Aplica status=ACTIVE como default cuando status es None (RB).
-        Ejecuta list y count en paralelo con asyncio.gather.
+        Ejecuta list y count en secuencia porque comparten la misma AsyncSession.
         """
         if status is None:
             status = UserStatusEnum.ACTIVE
 
-        users, total = await asyncio.gather(
-            self._repo.list(role=role, professor_id=professor_id, status=status, skip=skip, limit=limit, program_id=program_id),
-            self._repo.count(role=role, professor_id=professor_id, status=status, program_id=program_id),
+        users = await self._repo.list(
+            role=role,
+            professor_id=professor_id,
+            status=status,
+            skip=skip,
+            limit=limit,
+            program_id=program_id,
+        )
+        total = await self._repo.count(
+            role=role,
+            professor_id=professor_id,
+            status=status,
+            program_id=program_id,
         )
 
         return PaginatedResponse[UserRead](

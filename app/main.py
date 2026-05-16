@@ -7,11 +7,22 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from app.core.config import settings
+from app.core.config import settings, parse_cors_origins
 from app.api.v1.endpoints import (
     prediction, health, users, auth,
-    notifications, programs, courses, enrollments, referrals,
+    notifications, programs, courses, enrollments, subjects, referrals,
+    consents,
 )
+
+try:
+    from app.api.v1.endpoints import waha_webhook as _waha_mod
+    _waha_loaded = True
+    print("[WAHA] Módulo cargado correctamente", flush=True)
+except Exception as _waha_err:
+    import traceback as _tb
+    print(f"[WAHA] ERROR al importar módulo: {_waha_err}", flush=True)
+    _tb.print_exc()
+    _waha_loaded = False
 from app.domain.exceptions import (
     AuthenticationError,
     AuthorizationError,
@@ -47,12 +58,14 @@ app = FastAPI(
     version=settings.API_VERSION,
     docs_url="/docs",
     redoc_url="/redoc",
+    servers=settings.get_openapi_servers(),
     lifespan=lifespan,
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=parse_cors_origins(settings.CORS_ORIGINS),
+    allow_origin_regex=settings.CORS_ORIGIN_REGEX,
     allow_credentials=settings.CORS_ALLOW_CREDENTIALS,
     allow_methods=settings.CORS_ALLOW_METHODS,
     allow_headers=settings.CORS_ALLOW_HEADERS,
@@ -91,14 +104,18 @@ app.include_router(users.router,         prefix="/api/v1", tags=["Usuarios"])
 app.include_router(programs.router,      prefix="/api/v1", tags=["Programas"])
 app.include_router(courses.router,       prefix="/api/v1", tags=["Cursos"])
 app.include_router(enrollments.router,   prefix="/api/v1", tags=["Inscripciones"])
+app.include_router(subjects.router,      prefix="/api/v1", tags=["Materias"])
 app.include_router(referrals.router,     prefix="/api/v1", tags=["Remisiones"])
 app.include_router(notifications.router, prefix="/api/v1", tags=["Notificaciones"])
-
+app.include_router(consents.router,      prefix="/api/v1", tags=["Consentimiento"])
+if _waha_loaded:
+    app.include_router(_waha_mod.router, prefix="/api/v1", tags=["WhatsApp Bot"])
 
 @app.get("/")
 async def root():
     return {
         "mensaje": "API de Predicción de Riesgo Académico",
         "version": settings.API_VERSION,
+        "base_url": settings.get_public_base_url(),
         "documentacion": {"swagger": "/docs", "redoc": "/redoc"},
     }

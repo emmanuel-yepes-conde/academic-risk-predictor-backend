@@ -45,6 +45,7 @@ def _stub_heavy_deps():
     fake_ml = types.ModuleType("app.services.ml_service")
     fake_ml.risk_service = mock_risk_svc
     fake_ml.AcademicRiskService = MagicMock(return_value=mock_risk_svc)
+    fake_ml.get_risk_service = MagicMock(return_value=mock_risk_svc)
     sys.modules["app.services.ml_service"] = fake_ml
 
     return fake_db

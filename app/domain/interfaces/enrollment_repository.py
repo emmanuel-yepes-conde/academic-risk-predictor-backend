@@ -45,6 +45,11 @@ class IEnrollmentRepository(ABC):
     ) -> list[Enrollment]: ...
 
     @abstractmethod
+    async def list_by_course(
+        self, course_id: UUID, status: EnrollmentStatusEnum | None = None
+    ) -> list[Enrollment]: ...
+
+    @abstractmethod
     async def update_grades(
         self,
         enrollment_id: UUID,

@@ -33,8 +33,17 @@ Edita `.env` con los siguientes valores. **Solo cambia lo marcado con ⚠️** s
 
 ```env
 # Servidor
-HOST=0.0.0.0
+HOST=localhost
 PORT=8001                          # ⚠️ El frontend espera puerto 8001
+
+# Producción / Vercel
+# Guarda el DNS del backend de Azure en Vercel como la URL base del frontend:
+# NEXT_PUBLIC_API_BASE_URL=https://<dns-de-azure>
+# o VITE_API_BASE_URL=https://<dns-de-azure>
+AZURE_BACKEND_DNS=<dns-de-azure>    # opcional en backend; se normaliza a https://
+PUBLIC_BACKEND_URL=https://<dns-de-azure>
+CORS_ORIGINS=http://localhost:3000,http://localhost:4321,http://localhost:5173
+CORS_ORIGIN_REGEX=https://.*\.vercel\.app
 
 # Base de datos — Docker (no cambiar si usas docker-compose)
 POSTGRES_USER=mpra_user
@@ -146,13 +155,14 @@ Crea el usuario:
 
 ---
 
-## 7. (Opcional) Cargar datos de demo
+## 7. (Opcional) Poblar datos para reentrenamiento ML
 
 ```bash
-python3 scripts/seed_demo.py
+python3 -m scripts.seed_training_program
 ```
 
-Crea universidades, programas, materias y usuarios de ejemplo para probar la plataforma.
+Genera un programa completo (1º a 5º semestre), estudiantes, matrículas y `grades` en JSONB.
+Además, exporta/regenera `datasets/dataset_estudiantes_decimal.csv` para reentrenar el modelo.
 
 ---
 
@@ -160,7 +170,7 @@ Crea universidades, programas, materias y usuarios de ejemplo para probar la pla
 
 ```bash
 source venv/bin/activate
-python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+python3 -m uvicorn app.main:app --host localhost --port 8001 --reload
 ```
 
 El servidor quedará disponible en:
@@ -168,6 +178,19 @@ El servidor quedará disponible en:
 - Swagger UI: http://localhost:8001/docs
 - ReDoc: http://localhost:8001/redoc
 - Health check: http://localhost:8001/health
+
+---
+
+## Conectar frontend en Vercel
+
+1. Despliega el backend en Azure con `./infra/deploy.sh`. Al final el script imprime la URL pública, por ejemplo `https://ca-mpra-prod.example.azurecontainerapps.io`.
+2. En Vercel, entra al proyecto frontend y agrega una variable de entorno:
+   - Next.js: `NEXT_PUBLIC_API_BASE_URL=https://<dns-de-azure>`
+   - Vite: `VITE_API_BASE_URL=https://<dns-de-azure>`
+3. Redeploy del frontend en Vercel para que la variable quede embebida en el build.
+4. Si usas dominio propio en Vercel, agrega ese origen exacto en el backend con `CORS_ORIGINS=https://tu-dominio.com,http://localhost:3000`. Los dominios `*.vercel.app` ya quedan cubiertos con `CORS_ORIGIN_REGEX`.
+
+La API mantiene `/api/v1` como prefijo para endpoints de negocio, así que el frontend debería construir URLs como `${API_BASE_URL}/api/v1/auth/login`.
 
 ---
 
@@ -218,7 +241,8 @@ academic-risk-predictor-backend/
 │   └── scaler.joblib
 ├── scripts/
 │   ├── seed_admin.py                  # Crea admin@universidad.edu
-│   └── seed_demo.py                   # Carga datos de ejemplo
+│   ├── seed_training_program.py       # Seed masivo + export dataset de entrenamiento
+│   └── update_student_grades.py       # Ajuste manual de grades para un estudiante específico
 ├── docker-compose.yml
 ├── requirements.txt
 ├── alembic.ini
@@ -248,7 +272,8 @@ academic-risk-predictor-backend/
 ### Predicción ML
 | Método | Ruta | Descripción |
 |---|---|---|
-| POST | `/api/v1/predict` | Predicción de riesgo con 5 variables académicas |
+| POST | `/api/v1/predict` | Predicción de riesgo con notas por cohorte y total |
+| POST | `/api/v1/predict/cohort` | Predicción de riesgo de un cohorte (parcial + seguimiento + asistencia) |
 | POST | `/api/v1/chat` | Chat con consejero académico IA |
 
 ### Notificaciones (email)
@@ -265,11 +290,10 @@ academic-risk-predictor-backend/
 - Entrenado con ~99.000 registros
 - Precisión: ~90%
 - Variables de entrada (orden estricto):
-  1. `promedio_asistencia` — % asistencia a clases (0-100)
-  2. `promedio_seguimiento` — calificación seguimientos (0-5)
-  3. `nota_parcial_1` — nota primer parcial (0-5)
-  4. `inicios_sesion_plataforma` — logins en LMS
-  5. `uso_tutorias` — número de tutorías asistidas
+  1. `nota_corte_1` — nota del corte 1 (0-5)
+  2. `nota_corte_2` — nota del corte 2 (0-5)
+  3. `nota_corte_final` — nota del corte final (0-5)
+  4. `nota_total` — nota total ponderada (0-5)
 - Si los archivos `.joblib` no existen, se entrenan automáticamente al iniciar
 
 ---
