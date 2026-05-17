@@ -4,10 +4,16 @@ version = "1.0.0"
 requires-python = ">=3.12"
 
 [tool.taskipy.tasks]
-dev = "uvicorn app.main:app --reload --host localhost --port 8000"
-start = "python main.py"
-test = "pytest tests/ -v --cov=app"
-migrate = "alembic upgrade head"
+# ── Desarrollo local (Docker PostgreSQL, puerto 5433) ────────────────────────
+dev     = "APP_ENV=dev uvicorn app.main:app --reload --host 0.0.0.0 --port 8001"
+# ── Producción / Azure ───────────────────────────────────────────────────────
+prod    = "uvicorn app.main:app --reload --host 0.0.0.0 --port 8001"
+start   = "python main.py"
+# ── Migraciones (prefija con APP_ENV=dev para correr en local) ───────────────
+migrate-dev  = "APP_ENV=dev alembic upgrade head"
+migrate-prod = "alembic upgrade head"
+# ── Tests ────────────────────────────────────────────────────────────────────
+test    = "APP_ENV=dev pytest tests/ -v --cov=app"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

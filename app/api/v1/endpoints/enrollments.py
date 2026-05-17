@@ -6,8 +6,12 @@ Requisitos: 1.1, 1.9, 2.1, 2.7, 3.1, 3.4, 4.1, 4.3, 5.1, 5.3
 from decimal import Decimal
 from uuid import UUID
 
+import asyncio
+import logging
 import numpy as np
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+
+logger = logging.getLogger(__name__)
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -295,6 +299,160 @@ async def get_enrollment_grades(
     return await service.get_grades(enrollment_id, current_user)
 
 
+async def _send_whatsapp_risk_alert(
+    phone: str,
+    student_name: str,
+    course_name: str,
+    risk_pct: float,
+    analisis: str,
+    course_id: str,
+) -> None:
+    """Envía el análisis natural de riesgo ALTO por WhatsApp al estudiante."""
+    from app.core.config import settings
+    import httpx
+
+    # Normalizar número: quitar +, espacios, guiones → agregar código Colombia si falta
+    numero = phone.strip().replace(" ", "").replace("-", "").replace("+", "")
+    if not numero.startswith("57") and len(numero) == 10:
+        numero = f"57{numero}"
+    chat_id = f"{numero}@c.us"
+
+    nombre = student_name or "Estudiante"
+    texto = (
+        f"🔴 *Alerta de riesgo académico — {course_name}*\n\n"
+        f"Hola {nombre.split()[0]}, Risko detectó que tu riesgo de reprobación "
+        f"es *ALTO ({risk_pct:.0f}%)*.\n\n"
+        f"{analisis}\n\n"
+        f"📲 Ingresa a la plataforma para ver tu simulador y opciones de mejora."
+    )
+
+    url = f"{settings.WAHA_URL.rstrip('/')}/api/sendText"
+    payload = {"session": "default", "chatId": chat_id, "text": texto}
+    headers = {"X-Api-Key": settings.WAHA_API_KEY}
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(url, json=payload, headers=headers)
+        if resp.status_code >= 400:
+            logger.warning(f"[WhatsApp] Error enviando alerta de riesgo: {resp.status_code} {resp.text[:120]}")
+        else:
+            logger.info(f"[WhatsApp] ✅ Análisis de riesgo enviado → {chat_id}")
+    except Exception as exc:
+        logger.error(f"[WhatsApp] Excepción al enviar alerta: {exc}")
+
+
+async def _push_risk_alert_if_needed(
+    enrollment_id: UUID,
+    grades_result: GradesRead,
+    ml: AcademicRiskService,
+) -> None:
+    """
+    Background task: si los 3 cortes están completos y el riesgo es ALTO,
+    envía push notification al estudiante (sin bloquear la respuesta al profesor).
+    """
+    # Solo actuar si hay notas completas
+    if (
+        grades_result.first_cohort_grade is None
+        or grades_result.second_cohort_grade is None
+        or grades_result.third_cohort_grade is None
+        or grades_result.final_grade is None
+    ):
+        return
+
+    try:
+        features = [
+            float(grades_result.first_cohort_grade),
+            float(grades_result.second_cohort_grade),
+            float(grades_result.third_cohort_grade),
+            float(grades_result.final_grade),
+        ]
+        result = ml.predict(features)
+        if result["risk_level"] != "ALTO":
+            return
+
+        # Generar análisis natural ANTES de abrir la sesión BD
+        datos_estudiante = {
+            "nota_corte_1":    float(grades_result.first_cohort_grade),
+            "nota_corte_2":    float(grades_result.second_cohort_grade),
+            "nota_corte_final": float(grades_result.third_cohort_grade),
+            "nota_total":      float(grades_result.final_grade),
+        }
+        analisis_completo = ml.generar_analisis_ia(datos_estudiante, result["probability"])
+        # Primera línea del análisis para el cuerpo del push (corto)
+        primera_linea = analisis_completo.split("\n\n")[0]
+
+        # Abrir sesión propia para el background task
+        from app.infrastructure.database import engine
+        from sqlalchemy.ext.asyncio import AsyncSession as _AsyncSession
+        from app.infrastructure.models.enrollment import Enrollment as EnrollmentModel
+        from app.infrastructure.models.course import Course as CourseModel
+        from app.infrastructure.models.user import User as UserModel
+        from app.services.push_notification_service import (
+            send_push_to_user, build_risk_alert_message,
+        )
+
+        async with _AsyncSession(engine) as bg_session:
+            # Obtener enrollment para conocer student_id y course_id
+            enroll_q = await bg_session.execute(
+                select(EnrollmentModel).where(EnrollmentModel.id == enrollment_id)
+            )
+            enrollment = enroll_q.scalar_one_or_none()
+            if not enrollment:
+                return
+
+            # Obtener curso y estudiante en paralelo
+            course_q, user_q = await asyncio.gather(
+                bg_session.execute(
+                    select(CourseModel).where(CourseModel.id == enrollment.course_id)
+                ),
+                bg_session.execute(
+                    select(UserModel).where(UserModel.id == enrollment.student_id)
+                ),
+            )
+            course  = course_q.scalar_one_or_none()
+            student = user_q.scalar_one_or_none()
+
+            course_name   = course.name if course else "tu materia"
+            student_name  = student.full_name if student else ""
+            student_phone = student.phone if student else None
+
+            # ── Push notification (body = primera línea del análisis) ──────────
+            msg = build_risk_alert_message(
+                student_name=student_name,
+                course_name=course_name,
+                risk_level=result["risk_level"],
+                risk_pct=result["probability"] * 100,
+                course_id=str(enrollment.course_id),
+                analisis_primera_linea=primera_linea,
+            )
+            sent = await send_push_to_user(
+                user_id=str(enrollment.student_id),
+                title=msg["title"],
+                body=msg["body"],
+                url=msg["url"],
+                session=bg_session,
+            )
+            if sent > 0:
+                logger.info(
+                    f"[Push] Alerta ALTO enviada → student {enrollment.student_id} "
+                    f"en curso {course_name}"
+                )
+
+            # ── WhatsApp al estudiante (análisis completo) ────────────────────
+            if student_phone and settings.WAHA_URL:
+                await _send_whatsapp_risk_alert(
+                    phone=student_phone,
+                    student_name=student_name,
+                    course_name=course_name,
+                    risk_pct=result["probability"] * 100,
+                    analisis=analisis_completo,
+                    course_id=str(enrollment.course_id),
+                )
+
+    except Exception as exc:
+        logger.error(f"[Push] Error en background task de riesgo: {exc}")
+
+
 @router.put(
     "/enrollments/{enrollment_id}/grades",
     response_model=GradesRead,
@@ -313,10 +471,15 @@ async def get_enrollment_grades(
 async def set_enrollment_grades(
     enrollment_id: UUID,
     body: GradesUpdate,
+    background_tasks: BackgroundTasks,
     current_user: CurrentUser = Depends(get_current_user),
     service: GradeService = Depends(_get_grade_service),
+    ml: AcademicRiskService = Depends(_get_ml_service),
 ) -> GradesRead:
-    return await service.set_grades(enrollment_id, body.grades, current_user)
+    result = await service.set_grades(enrollment_id, body.grades, current_user)
+    # Verificar riesgo y enviar push en segundo plano (no bloquea la respuesta)
+    background_tasks.add_task(_push_risk_alert_if_needed, enrollment_id, result, ml)
+    return result
 
 
 @router.post(

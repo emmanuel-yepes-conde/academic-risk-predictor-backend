@@ -82,6 +82,12 @@ async def waha_webhook(
     if not from_jid:
         return JSONResponse({"status": "ignored", "reason": "no from"})
 
+    # Ignorar TODOS los mensajes de grupos (JID termina en @g.us)
+    # El bot solo atiende chats individuales; los grupos se usan solo para
+    # enviar alertas de monitoreo, nunca para recibir ni responder mensajes.
+    if from_jid.endswith("@g.us"):
+        return JSONResponse({"status": "ignored", "reason": "group_message"})
+
     text: str = (payload.get("body") or "").strip()
     if not text:
         return JSONResponse({"status": "ignored", "reason": "empty body"})

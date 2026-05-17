@@ -3,6 +3,7 @@ Academic Risk Predictor Backend
 Entry Point de la aplicación FastAPI
 """
 
+import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,6 +14,10 @@ from app.api.v1.endpoints import (
     notifications, programs, courses, enrollments, subjects, referrals,
     consents,
 )
+from app.api.v1.endpoints.templates import router as templates_router
+from app.api.v1.endpoints.push import router as push_router
+from app.api.v1.endpoints.attendance import router as attendance_router
+from app.api.v1.endpoints.inapp_notifications import router as inapp_notif_router
 
 try:
     from app.api.v1.endpoints import waha_webhook as _waha_mod
@@ -44,10 +49,33 @@ async def lifespan(app: FastAPI):
     async with engine.connect():
         pass
     print("✅ SISTEMA INICIADO Y LISTO PARA RECIBIR PETICIONES")
+
+    # ── Cron de monitoreo de servicios ────────────────────────────────────
+    _monitoring_task: asyncio.Task | None = None
+    if settings.MONITORING_ENABLED:
+        try:
+            from app.services.monitoring_service import start_monitoring_loop
+            _monitoring_task = asyncio.create_task(start_monitoring_loop())
+            print(
+                f"✅ MONITOR iniciado — intervalo {settings.MONITORING_INTERVAL_MINUTES} min "
+                f"| grupo {settings.WAHA_MONITORING_GROUP or 'NO CONFIGURADO'}",
+                flush=True,
+            )
+        except Exception as _mon_err:
+            print(f"⚠️  MONITOR no pudo iniciarse: {_mon_err}", flush=True)
+    else:
+        print("⏸️  MONITOR desactivado (MONITORING_ENABLED=false)", flush=True)
+
     print("="*80 + "\n")
     yield
     print("\n" + "="*80)
     print("👋 CERRANDO SISTEMA DE PREDICCIÓN DE RIESGO ACADÉMICO")
+    if _monitoring_task and not _monitoring_task.done():
+        _monitoring_task.cancel()
+        try:
+            await _monitoring_task
+        except asyncio.CancelledError:
+            pass
     await engine.dispose()
     print("="*80 + "\n")
 
@@ -108,6 +136,10 @@ app.include_router(subjects.router,      prefix="/api/v1", tags=["Materias"])
 app.include_router(referrals.router,     prefix="/api/v1", tags=["Remisiones"])
 app.include_router(notifications.router, prefix="/api/v1", tags=["Notificaciones"])
 app.include_router(consents.router,      prefix="/api/v1", tags=["Consentimiento"])
+app.include_router(templates_router,     prefix="/api/v1", tags=["templates"])
+app.include_router(push_router,          prefix="/api/v1", tags=["Push Notifications"])
+app.include_router(attendance_router,    prefix="/api/v1", tags=["Attendance"])
+app.include_router(inapp_notif_router,   prefix="/api/v1", tags=["In-App Notifications"])
 if _waha_loaded:
     app.include_router(_waha_mod.router, prefix="/api/v1", tags=["WhatsApp Bot"])
 

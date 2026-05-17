@@ -199,7 +199,11 @@ class WahaChatbotService:
                 f"{emoji} *Riesgo: {nivel}*",
                 f"Probabilidad de reprobar: *{prob * 100:.1f}%*",
                 "",
-                f"Corte 1: {c1:.2f}  |  Corte 2: {c2:.2f}  |  Corte Final: {c3:.2f}  |  Total: {final:.2f}",
+                "📝 *Calificaciones:*",
+                f"  • Corte 1: *{c1:.2f}*",
+                f"  • Corte 2: *{c2:.2f}*",
+                f"  • Corte Final: *{c3:.2f}*",
+                f"  • Total: *{final:.2f}*",
                 "",
                 _recommendation(nivel),
             ]
@@ -208,7 +212,9 @@ class WahaChatbotService:
             lines.append("ℹ️ Aún no hay calificaciones completas registradas para esta materia.")
             available = _available_grades(enroll)
             if available:
-                lines.append("Notas disponibles: " + "  |  ".join(available))
+                lines.append("📝 *Notas disponibles:*")
+                for g in available:
+                    lines.append(f"  • {g}")
 
         return "\n".join(lines)
 
@@ -217,9 +223,9 @@ class WahaChatbotService:
     @staticmethod
     def _greeting() -> str:
         return (
-            "👋 Hola! Soy el asistente de *Riesgo Académico*.\n\n"
+            "👋 ¡Hola! Soy *Risko*, tu asistente virtual de *Academic Risk*. 🎓\n\n"
             "Por favor, ingresa tu *número de documento* de identidad "
-            "(cédula, TI, etc.) para comenzar el análisis."
+            "(cédula o TI) para comenzar el análisis."
         )
 
     @staticmethod

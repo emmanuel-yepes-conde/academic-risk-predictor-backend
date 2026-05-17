@@ -138,6 +138,23 @@ class Settings(BaseSettings):
     # Integración WAHA (WhatsApp HTTP API)
     WAHA_URL: str = Field(default="", description="URL base de la instancia WAHA")
     WAHA_API_KEY: str = Field(default="", description="API Key / contraseña de WAHA")
+    WAHA_MONITORING_GROUP: str = Field(
+        default="",
+        description="JID del grupo de WhatsApp que recibe alertas de monitoreo (ej. 120363026555180246@g.us)",
+    )
+    MONITORING_INTERVAL_MINUTES: int = Field(
+        default=5,
+        description="Intervalo en minutos del cron de monitoreo de servicios",
+    )
+    MONITORING_ENABLED: bool = Field(
+        default=True,
+        description="Activar/desactivar el cron de monitoreo de servicios",
+    )
+
+    # Web Push Notifications (VAPID)
+    VAPID_PRIVATE_KEY_B64: str = Field(default="", description="Clave privada VAPID en base64 para push notifications")
+    VAPID_PUBLIC_KEY: str = Field(default="", description="Clave pública VAPID (enviar al frontend)")
+    VAPID_CONTACT_EMAIL: str = Field(default="admin@academicrisk.edu.co", description="Email de contacto para VAPID claims")
 
     # Configuración SMTP para envío de correos
     SMTP_SERVER: str = Field(default="smtp.gmail.com", description="Servidor SMTP")
@@ -157,6 +174,10 @@ class Settings(BaseSettings):
     ACS_CONSEJERIA_EMAIL: str = Field(
         default="",
         description="Correo del área de consejería/permanencia que recibe notificaciones",
+    )
+    FRONTEND_URL: str = Field(
+        default="http://localhost:3000",
+        description="URL base del frontend — se usa en los botones de los correos",
     )
 
     @model_validator(mode='before')
@@ -182,7 +203,9 @@ class Settings(BaseSettings):
         return values
 
     model_config = {
-        "env_file": ".env",
+        # APP_ENV=dev  →  lee .env.dev  (Docker local, puerto 5433)
+        # APP_ENV=<otro o ausente>  →  lee .env  (Azure producción)
+        "env_file": ".env.dev" if os.environ.get("APP_ENV") == "dev" else ".env",
         "env_file_encoding": "utf-8",
         "case_sensitive": True,
         "extra": "ignore",

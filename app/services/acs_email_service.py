@@ -151,17 +151,25 @@ def _base_layout(badge_color: str, badge_text: str, body_html: str) -> str:
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _btn(text: str, href: str = "#") -> str:
+    # bgcolor (atributo HTML) lo respeta Outlook desktop + OWA + todos los clientes.
+    # background-color CSS actúa como refuerzo para Gmail, Apple Mail, etc.
+    # mso-padding-alt controla el padding en el motor Word de Outlook desktop.
     return f"""<table width="100%" cellpadding="0" cellspacing="0"
        style="margin-top:28px;">
   <tr>
     <td align="center">
-      <table cellpadding="0" cellspacing="0">
+      <table cellpadding="0" cellspacing="0" border="0">
         <tr>
-          <td style="background:{GREEN};border-radius:8px;">
+          <td align="center" bgcolor="{GREEN}"
+              style="border-radius:6px;background-color:{GREEN};
+                     mso-padding-alt:14px 36px;">
             <a href="{href}"
-               style="display:inline-block;padding:13px 32px;
-                      font-size:14px;font-weight:600;color:{WHITE};
-                      text-decoration:none;letter-spacing:0.2px;">
+               style="display:block;padding:14px 36px;
+                      font-family:Arial,Helvetica,sans-serif;
+                      font-size:15px;font-weight:700;
+                      color:{WHITE};text-decoration:none;
+                      letter-spacing:0.3px;border-radius:6px;
+                      mso-padding-alt:0;">
               {text}
             </a>
           </td>
@@ -261,7 +269,7 @@ def _first_access_html(student_name: str) -> str:
         Cuanto antes conozcas tu situación, más tiempo tienes
         para actuar. El semestre avanza.
       </p>
-      {_btn("Ingresar a Academic Risk")}
+      {_btn("Ingresar a Academic Risk", settings.FRONTEND_URL)}
     """
     return _base_layout(GREEN, "Recordatorio", body)
 
@@ -333,7 +341,7 @@ def _student_risk_alert_html(
         Si crees que hay un error, consulta con tu docente
         o el área de consejería.
       </p>
-      {_btn("Ver mi análisis completo")}
+      {_btn("Ver mi análisis completo", settings.FRONTEND_URL)}
     """
     return _base_layout(color, "Alerta de Riesgo", body)
 
@@ -401,7 +409,7 @@ def _good_performance_html(
                 color:{TEXT};text-align:center;">
         Sigue así, <strong>{student_name}</strong>. El semestre va bien.
       </p>
-      {_btn("Ver mi análisis completo")}
+      {_btn("Ver mi análisis completo", settings.FRONTEND_URL)}
     """
     return _base_layout(GREEN, "Buen Desempeno", body)
 
@@ -507,7 +515,7 @@ def _professor_risk_summary_html(
         Los estudiantes con riesgo alto o medio pueden requerir
         acompañamiento adicional.
       </p>
-      {_btn("Ver detalle en la plataforma")}
+      {_btn("Ver detalle en la plataforma", settings.FRONTEND_URL)}
     """
     return _base_layout(GREEN, "Reporte", body)
 
@@ -678,11 +686,31 @@ async def _send_acs(
         return False
 
 
-def _guard() -> bool:
-    if not _is_configured():
-        logger.warning("ACS_CONNECTION_STRING no configurado — ACS desactivado")
+async def _dispatch(to_email: str, subject: str, html_content: str) -> bool:
+    """
+    Plan A → ACS.  Plan B → SMTP (fallback automático si ACS falla o no está configurado).
+    Nunca lanza excepciones; retorna False si ambos canales fallan.
+    """
+    # ── Plan A: ACS ──────────────────────────────────────────────────────────
+    if _is_configured():
+        ok = await _send_acs(to_email, subject, html_content)
+        if ok:
+            return True
+        logger.warning(
+            "ACS falló para %s — activando fallback SMTP", to_email
+        )
+
+    # ── Plan B: SMTP ─────────────────────────────────────────────────────────
+    try:
+        from app.services.email_service import _send_email_sync  # import diferido
+        await asyncio.to_thread(_send_email_sync, to_email, subject, html_content)
+        logger.info("SMTP fallback OK para %s — %s", to_email, subject)
+        return True
+    except Exception as exc:
+        logger.error(
+            "SMTP fallback también falló para %s: %s", to_email, exc, exc_info=True
+        )
         return False
-    return True
 
 
 # ============================================================================
@@ -692,8 +720,7 @@ def _guard() -> bool:
 async def send_first_access_reminder(
     student_email: str, student_name: str,
 ) -> bool:
-    if not _guard(): return False
-    return await _send_acs(
+    return await _dispatch(
         to_email=student_email,
         subject="Tu semestre ya lleva un mes — Academic Risk",
         html_content=_first_access_html(student_name),
@@ -704,8 +731,7 @@ async def send_student_risk_alert(
     student_email: str, student_name: str,
     course_name: str, risk_pct: float, risk_level: str,
 ) -> bool:
-    if not _guard(): return False
-    return await _send_acs(
+    return await _dispatch(
         to_email=student_email,
         subject=f"Indicadores de riesgo en {course_name} — Academic Risk",
         html_content=_student_risk_alert_html(
@@ -717,8 +743,7 @@ async def send_good_performance(
     student_email: str, student_name: str,
     course_name: str, risk_pct: float,
 ) -> bool:
-    if not _guard(): return False
-    return await _send_acs(
+    return await _dispatch(
         to_email=student_email,
         subject=f"Vas por buen camino en {course_name} — Academic Risk",
         html_content=_good_performance_html(student_name, course_name, risk_pct),
@@ -730,8 +755,7 @@ async def send_professor_risk_summary(
     course_name: str, course_code: str,
     students: list[dict],
 ) -> bool:
-    if not _guard(): return False
-    return await _send_acs(
+    return await _dispatch(
         to_email=professor_email,
         subject=f"Resumen de riesgo académico — {course_code}",
         html_content=_professor_risk_summary_html(
@@ -745,17 +769,15 @@ async def notify_referral_created(
     professor_name: str, course_name: str,
     tipo_remision: str, observaciones: str, fecha_remision: str,
 ) -> dict[str, bool]:
-    if not _guard(): return {"student": False, "consejeria": False}
-
     student_ok, consejeria_ok = await asyncio.gather(
-        _send_acs(
+        _dispatch(
             to_email=student_email,
             subject=f"Remisión a consejería en {course_name} — Academic Risk",
             html_content=_referral_student_html(
                 student_name, professor_name, course_name,
                 tipo_remision, observaciones, fecha_remision),
         ),
-        _send_acs(
+        _dispatch(
             to_email=settings.ACS_CONSEJERIA_EMAIL,
             subject=f"Nueva remisión: {student_name} — {course_name}",
             html_content=_referral_consejeria_html(
