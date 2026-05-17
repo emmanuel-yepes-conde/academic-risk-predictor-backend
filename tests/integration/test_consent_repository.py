@@ -120,11 +120,14 @@ async def test_get_consent_after_register():
 
 
 # ---------------------------------------------------------------------------
-# Constraint test using SQLite in-memory (IntegrityError on duplicate student_id)
+# Consent immutability: multiple records per student are allowed (migration 0022
+# intentionally dropped the UNIQUE constraint so revocation + re-acceptance
+# can each create a new row without modifying existing ones).
 # ---------------------------------------------------------------------------
 
 def test_duplicate_consent_raises_integrity_error():
-    """Inserting two Consent records for the same student_id raises IntegrityError."""
+    """Two Consent rows for the same student_id are allowed (no unique constraint
+    since migration 0022 — consent history is append-only)."""
     engine = make_sqlite_engine()
     student_id = uuid.uuid4()
 
@@ -146,8 +149,13 @@ def test_duplicate_consent_raises_integrity_error():
             terms_version="v1.1",
             accepted_at=now(),
         ))
-        with pytest.raises(IntegrityError):
-            session.commit()
-        session.rollback()
+        session.commit()  # must NOT raise — multiple records allowed
+
+    with Session(engine) as session:
+        from sqlalchemy import select, func
+        count = session.execute(
+            select(func.count()).where(Consent.student_id == student_id)
+        ).scalar_one()
+        assert count == 2, f"Expected 2 consent rows, got {count}"
 
     engine.dispose()

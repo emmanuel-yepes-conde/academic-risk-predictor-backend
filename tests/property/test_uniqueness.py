@@ -137,18 +137,20 @@ async def test_enrollment_uniqueness(student_id: uuid.UUID, course_id: uuid.UUID
 @given(student_id=st.uuids(), course_id=st.uuids())
 async def test_consent_student_id_uniqueness(student_id: uuid.UUID, course_id: uuid.UUID):
     """
-    **Validates: Requirements 4.6**
+    **Validates: Requirements 4.6 (updated after migration 0022)**
 
-    Property 3 (Consent): For any student_id, a second INSERT with the same
-    student_id must raise IntegrityError and leave exactly one Consent record
-    for that student.
+    Property 3 (Consent): Consent records are append-only — revocation and
+    re-acceptance each create a new row for the same student_id.  The UNIQUE
+    constraint on student_id was intentionally dropped in migration 0022 to
+    support this pattern.  A second INSERT for the same student_id must
+    succeed and leave exactly two Consent records.
 
-    The course_id parameter is accepted (matching the @given signature
-    convention) but unused — Consent uniqueness is on student_id alone.
+    The course_id parameter is kept to match the @given signature convention
+    but is unused — Consent rows are keyed only by student_id.
     """
     engine = _make_engine()
 
-    # First INSERT in its own session — must succeed
+    # First INSERT — must succeed
     with Session(engine) as session:
         first = Consent(
             id=uuid.uuid4(),
@@ -160,25 +162,23 @@ async def test_consent_student_id_uniqueness(student_id: uuid.UUID, course_id: u
         session.add(first)
         session.commit()
 
-    # Second INSERT in a new session — must fail with IntegrityError
+    # Second INSERT — must also succeed (no unique constraint since 0022)
     with Session(engine) as session:
-        duplicate = Consent(
+        second = Consent(
             id=uuid.uuid4(),
             student_id=student_id,
             accepted=False,
             terms_version="v1.1",
             accepted_at=_now(),
         )
-        session.add(duplicate)
-        with pytest.raises(IntegrityError):
-            session.commit()
-        session.rollback()
+        session.add(second)
+        session.commit()  # must NOT raise
 
-    # Verify exactly one record remains in a clean session
+    # Verify both records exist
     with Session(engine) as session:
         count = _count(session, Consent, student_id=student_id)
-        assert count == 1, (
-            f"Expected exactly 1 Consent for student_id={student_id}, got {count}"
+        assert count == 2, (
+            f"Expected 2 Consent rows for student_id={student_id}, got {count}"
         )
 
     engine.dispose()
