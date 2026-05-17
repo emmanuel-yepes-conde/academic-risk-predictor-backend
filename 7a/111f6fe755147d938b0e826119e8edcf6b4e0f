@@ -1,0 +1,106 @@
+app/api/v1/endpoints/push.py
+  s_b03b3a99345ebc::t_2901f5f0d53295 1-22,24-56,58-99,101-119
+  s_b03b3a99345ebc::t_4a36cfecfd7125 57
+  s_b03b3a99345ebc::t_14f1277cb07fbd 23
+  s_b03b3a99345ebc::t_8033354c8f437b 100
+app/main.py
+  s_b03b3a99345ebc::t_ae2d0ec5fff907 140
+  s_b03b3a99345ebc::t_d7dac03292fb95 141
+  s_b03b3a99345ebc::t_0efb47b6fce85d 139
+  s_b03b3a99345ebc::t_3cab30a0e7331c 17
+  s_b03b3a99345ebc::t_ef4e16d6ba97ff 6
+  s_b03b3a99345ebc::t_72c43f248782b1 55-67
+  s_b03b3a99345ebc::t_59d6143df1c717 142
+  s_b03b3a99345ebc::t_91c14a240f40bc 20
+app/infrastructure/models/attendance.py
+  s_b03b3a99345ebc::t_4ff2f9c5207a33 1-21,25,27-28,30-34,36,39-44,50
+  s_b03b3a99345ebc::t_7f4f3e71d10ef9 22-24,26,29,35,37-38,45-49
+app/api/v1/endpoints/users.py
+  s_b03b3a99345ebc::t_2eb0fd363ac85d 159-213
+  s_b03b3a99345ebc::t_e5be0a01cd5a49 19-20,34,40,46-65
+alembic/versions/0025_notifications_and_user_prefs.py
+  s_b03b3a99345ebc::t_b99a76db021a58 1-72
+app/api/v1/endpoints/enrollments.py
+  s_b03b3a99345ebc::t_98d0e5a9277585 344-372,384-388,390-402,411,418,420,422-425,427-439,452-455,474,477,479-482
+  s_b03b3a99345ebc::t_ae754a678d780f 373-383,389,403-410,412-417,419,421,426,440-451
+  s_b03b3a99345ebc::t_9b9caa96d45241 302-343
+  s_b03b3a99345ebc::t_d540be363371c4 9
+  s_b03b3a99345ebc::t_3e7a121fa644b6 10,12-14
+app/api/v1/endpoints/attendance.py
+  s_b03b3a99345ebc::t_ee92a525ac5d22 1-15,17,19-23,25,27-31,33-37,41-44,97-249,251-313,339-340,342-395,397-399
+  s_b03b3a99345ebc::t_1d7216edc129a9 16,18,24,26,32,38-40
+  s_b03b3a99345ebc::t_625b9e1688f7c9 45-47,51-96
+  s_b03b3a99345ebc::t_448fac65a89886 250
+  s_b03b3a99345ebc::t_480b2c20ba17f2 396
+  s_b03b3a99345ebc::t_8f2f5f812bcd71 400-547
+  s_b03b3a99345ebc::t_84fbed51b80d5f 48-50
+  s_b03b3a99345ebc::t_7d830d51cb7eb4 314-333,337-338,341
+alembic/versions/0024_add_attendance_tables.py
+  s_b03b3a99345ebc::t_6e181335a2da59 1-50,62-64,66-70
+  s_b03b3a99345ebc::t_456efc66ed2a54 51-61
+  s_b03b3a99345ebc::t_a6f65e80347c88 65
+app/services/push_notification_service.py
+  s_b03b3a99345ebc::t_acafad79c11aba 152,155-156,159-163,166-169
+  s_b03b3a99345ebc::t_69592e321de590 1-151,153-154,157-158,164-165,170-171
+app/services/monitoring_service.py
+  s_b03b3a99345ebc::t_f2f9f3d3cf2e1e 64
+  s_b03b3a99345ebc::t_dffa5c82c609c8 1-19,21,24-25,27-31,33-63,65-74,86,88,91-92,100-231,502-516,518-525,529,533-597
+  s_b03b3a99345ebc::t_2e1e5478456240 26
+  s_b03b3a99345ebc::t_7f6f33faa80480 23
+  s_b03b3a99345ebc::t_ae74bfbc3f5645 20,22
+  s_b03b3a99345ebc::t_12a1bf849dc1d0 530-532
+  s_b03b3a99345ebc::t_c83a15a1fee045 517,526-528
+  s_b03b3a99345ebc::t_3a840a8027f5bb 75-85,87,89-90,93-99
+  s_b03b3a99345ebc::t_6009731c129e66 349-501
+  s_b03b3a99345ebc::t_ad1600e5c4c859 32
+app/infrastructure/models/__init__.py
+  s_b03b3a99345ebc::t_70a72b94485e78 13,26
+  s_b03b3a99345ebc::t_ee41c158152d4f 14,27-28
+  s_b03b3a99345ebc::t_1de67c82e250d8 15,29
+app/application/services/waha_chatbot_service.py
+  s_b03b3a99345ebc::t_4327b379339128 202-206
+  s_b03b3a99345ebc::t_426c94b3432c38 215-217
+alembic/versions/0023_add_push_subscriptions.py
+  s_b03b3a99345ebc::t_e72a19d8dfc6ec 1-21,27-28,30-32,34
+  s_b03b3a99345ebc::t_e1970cf4d84c56 22-26,29,33
+requirements.txt
+  s_b03b3a99345ebc::t_2d00fb14b24454 40-42
+pyproject.toml
+  s_b03b3a99345ebc::t_dc06e62ed867a0 7-16
+app/api/v1/endpoints/templates.py
+  s_b03b3a99345ebc::t_3677a7194fb847 64-68,81-85,98-102
+  s_b03b3a99345ebc::t_edfff9f7f518a5 1-35,38-63,69-80,86-97,103-278
+  s_b03b3a99345ebc::t_754eb9c4441462 36-37
+app/services/ml_service.py
+  s_b03b3a99345ebc::t_a9d30b58999ac6 305,313-325,327,329,331-367,369-400,402,404
+app/services/notification_service.py
+  s_b03b3a99345ebc::t_662aa8a41f97d7 1-134
+app/api/v1/endpoints/waha_webhook.py
+  s_b03b3a99345ebc::t_640914afd3e40c 85-89
+  s_b03b3a99345ebc::t_f5caaebc5413c4 90
+app/services/email_service.py
+  s_b03b3a99345ebc::t_27e12847e3f529 305-324
+app/core/config.py
+  s_b03b3a99345ebc::t_40cb2b267d42ad 154-157
+  s_b03b3a99345ebc::t_c3ac91d08c84df 206-208
+  s_b03b3a99345ebc::t_317c9edd12cf1b 149-152
+  s_b03b3a99345ebc::t_0faa4561a3da3a 141-148
+app/infrastructure/models/push_subscription.py
+  s_b03b3a99345ebc::t_697a91558538f5 1-48
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "7a111f6fe755147d938b0e826119e8edcf6b4e0f",
+  "prompts": {},
+  "sessions": {
+    "s_b03b3a99345ebc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "379dbf03-6b10-4ee4-83b4-56a99a81b41a",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "daforonda_meli <davidlujan.foronda@mercadolibre.com.co>"
+    }
+  }
+}
