@@ -1,0 +1,134 @@
+"""
+notification_service — crea notificaciones in-app y las envía por
+WhatsApp y/o email según las preferencias del usuario.
+
+Uso desde cualquier endpoint/cron:
+    from app.services.notification_service import notify
+
+    await notify(
+        db=db,
+        user=student,
+        type="RISK_ALTO",
+        title="Riesgo alto detectado",
+        body="Tu riesgo en Cálculo Diferencial es del 82%.",
+        data={"course_id": str(course.id)},
+    )
+"""
+
+from __future__ import annotations
+
+import logging
+from datetime import datetime
+from typing import Optional
+from uuid import UUID
+
+import httpx
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.config import settings
+from app.infrastructure.models.notification import Notification
+from app.infrastructure.models.user import User
+
+logger = logging.getLogger(__name__)
+
+# Iconos por tipo para el mensaje WhatsApp
+_WA_ICON = {
+    "RISK_ALTO":     "🔴",
+    "RISK_RECOVERED": "🟢",
+    "ATTENDANCE":    "✅",
+    "GRADE_UPDATE":  "📝",
+    "CLASS_CRISIS":  "⚠️",
+    "SYSTEM":        "🔔",
+}
+
+
+async def notify(
+    db: AsyncSession,
+    user: User,
+    type: str,
+    title: str,
+    body: str,
+    data: Optional[dict] = None,
+    send_whatsapp: bool = True,
+    send_email: bool = False,
+) -> Notification:
+    """
+    Crea una notificación in-app y, según las prefs del usuario,
+    la envía por WhatsApp y/o email.
+
+    Siempre guarda en DB aunque fallen los canales externos.
+    """
+    # 1. Guardar en DB
+    notif = Notification(
+        user_id=user.id,
+        type=type,
+        title=title,
+        body=body,
+        data=data,
+    )
+    db.add(notif)
+    await db.commit()
+    await db.refresh(notif)
+
+    # 2. WhatsApp (si el usuario lo habilitó y tiene número)
+    if send_whatsapp and getattr(user, "whatsapp_enabled", True) and getattr(user, "phone", None):
+        try:
+            await _send_whatsapp(user.phone, type, title, body)
+        except Exception as exc:
+            logger.warning("[notify] WhatsApp falló para %s: %s", user.id, exc)
+
+    # 3. Email (si el usuario lo habilitó y hay servicio configurado)
+    if send_email and getattr(user, "email_enabled", True) and user.email:
+        try:
+            await _send_email(user.email, user.full_name, title, body)
+        except Exception as exc:
+            logger.warning("[notify] Email falló para %s: %s", user.id, exc)
+
+    return notif
+
+
+async def notify_by_user_id(
+    db: AsyncSession,
+    user_id: UUID,
+    type: str,
+    title: str,
+    body: str,
+    data: Optional[dict] = None,
+) -> None:
+    """Versión ligera que solo guarda en DB (sin buscar preferencias del usuario)."""
+    notif = Notification(
+        user_id=user_id,
+        type=type,
+        title=title,
+        body=body,
+        data=data,
+    )
+    db.add(notif)
+    await db.commit()
+
+
+# ─── Helpers privados ─────────────────────────────────────────────────────────
+
+async def _send_whatsapp(phone: str, type: str, title: str, body: str) -> None:
+    if not settings.WAHA_URL:
+        return
+    numero = phone.strip().replace(" ", "").replace("-", "").replace("+", "")
+    if not numero.startswith("57") and len(numero) == 10:
+        numero = f"57{numero}"
+    icon = _WA_ICON.get(type, "🔔")
+    texto = f"{icon} *{title}*\n\n{body}"
+    async with httpx.AsyncClient(timeout=10) as client:
+        await client.post(
+            f"{settings.WAHA_URL.rstrip('/')}/api/sendText",
+            json={"chatId": f"{numero}@c.us", "text": texto, "session": "default"},
+            headers={"X-Api-Key": settings.WAHA_API_KEY},
+        )
+
+
+async def _send_email(email: str, name: str, title: str, body: str) -> None:
+    """Usa el servicio de email existente si está configurado."""
+    try:
+        from app.services.email_service import send_generic_notification
+        await send_generic_notification(email=email, name=name, subject=title, body=body)
+    except (ImportError, Exception) as exc:
+        logger.debug("[notify] email service unavailable: %s", exc)

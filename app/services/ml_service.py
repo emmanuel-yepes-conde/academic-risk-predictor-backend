@@ -302,43 +302,106 @@ class AcademicRiskService:
         return "BAJO"
 
     def generar_analisis_ia(self, datos_estudiante: Dict, probabilidad_riesgo: float) -> str:
-        """Análisis sencillo y entendible para el estudiante, basado en cohortes."""
+        """Análisis personalizado y enriquecido para el estudiante, basado en cohortes y promedios de aprobados."""
         porcentaje = probabilidad_riesgo * 100
         nivel = self._classify_risk(probabilidad_riesgo)
 
         c1 = float(datos_estudiante["nota_corte_1"])
         c2 = float(datos_estudiante["nota_corte_2"])
         c3 = float(datos_estudiante["nota_corte_final"])
-        total = float(datos_estudiante["nota_total"])
 
-        lineas: list[str] = []
+        promedios = self.promedio_estudiantes_aprobados or {
+            "nota_corte_1": 3.5,
+            "nota_corte_2": 3.5,
+            "nota_corte_final": 3.5,
+            "nota_total": 3.5,
+        }
+        avg1 = float(promedios.get("nota_corte_1", 3.5))
+        avg2 = float(promedios.get("nota_corte_2", 3.5))
+        avg3 = float(promedios.get("nota_corte_final", 3.5))
+
+        parrafos: list[str] = []
+
+        # 1. Frase de apertura según nivel de riesgo
         if nivel == "ALTO":
-            lineas.append(f"Riesgo alto ({porcentaje:.1f}%). Necesitas intervenir ya.")
+            parrafos.append(f"Tu riesgo de reprobación es alto ({porcentaje:.1f}%). Necesitas actuar cuanto antes.")
         elif nivel == "MEDIO":
-            lineas.append(f"Riesgo medio ({porcentaje:.1f}%). Estás a tiempo de mejorar.")
+            parrafos.append(f"Tu riesgo es moderado ({porcentaje:.1f}%). Aún estás a tiempo de mejorar.")
         else:
-            lineas.append(f"Riesgo bajo ({porcentaje:.1f}%). Vas en buen camino.")
+            parrafos.append(f"Vas bien, riesgo bajo ({porcentaje:.1f}%). Mantén el ritmo.")
 
-        lineas.append(
-            f"Notas actuales — Corte 1: {c1:.1f}, Corte 2: {c2:.1f}, "
-            f"Corte final: {c3:.1f}, Total: {total:.1f}."
-        )
+        # 2. Comparación de notas vs promedio de aprobados (solo cortes con valor > 0)
+        comparacion: list[str] = []
+        cortes_con_nota = [
+            (1, c1, avg1, "Corte 1"),
+            (2, c2, avg2, "Corte 2"),
+            (3, c3, avg3, "Corte Final"),
+        ]
+        for _, nota, avg, etiqueta in cortes_con_nota:
+            if nota > 0:
+                gap = abs(nota - avg)
+                if nota < avg:
+                    comparacion.append(
+                        f"{etiqueta}: {nota:.1f} — {gap:.1f} puntos por debajo del promedio de quienes aprobaron ({avg:.1f})"
+                    )
+                else:
+                    comparacion.append(
+                        f"{etiqueta}: {nota:.1f} — {gap:.1f} puntos por encima del promedio de aprobados ({avg:.1f}) ✓"
+                    )
+        if comparacion:
+            parrafos.append("\n".join(comparacion))
 
-        debiles: list[str] = []
-        if c1 < 3.0:
-            debiles.append("Corte 1")
-        if c2 < 3.0:
-            debiles.append("Corte 2")
-        if c3 < 3.0:
-            debiles.append("Corte final")
+        # 3. Análisis de tendencia (solo si hay al menos 2 cortes con nota > 0)
+        notas_disponibles = [(nota, etiqueta) for _, nota, _, etiqueta in cortes_con_nota if nota > 0]
+        if len(notas_disponibles) >= 2:
+            valores = [n for n, _ in notas_disponibles]
+            flecha = " → ".join(f"{n:.1f}" for n in valores)
+            cambios = [valores[i + 1] - valores[i] for i in range(len(valores) - 1)]
+            if all(d > 0 for d in cambios):
+                parrafos.append(f"Tendencia positiva: tus notas van al alza ({flecha}).")
+            elif all(d < 0 for d in cambios):
+                parrafos.append(f"Tendencia negativa: tus notas han bajado ({flecha}). Requiere atención.")
+            else:
+                parrafos.append(
+                    f"Tendencia variable: tus notas oscilan entre {min(valores):.1f} y {max(valores):.1f}."
+                )
 
-        if debiles:
-            lineas.append("Áreas a reforzar: " + ", ".join(debiles) + ".")
-            lineas.append("Prioriza preparación para la actividad final y recuperación de temas base.")
+        # 4. Nota mínima necesaria para aprobar (solo si Corte Final no está registrado, es decir c3 == 0)
+        if c3 == 0.0:
+            # Pesos: C1=30%, C2=30%, C3=40%
+            nota_acumulada = c1 * 0.30 + c2 * 0.30
+            nota_maxima = nota_acumulada + 5.0 * 0.40
+            if nota_maxima < 3.0:
+                parrafos.append(
+                    f"Con las notas actuales, incluso sacando 5.0 en Corte Final, "
+                    f"la nota máxima alcanzable es {nota_maxima:.2f}."
+                )
+            else:
+                needed = (3.0 - nota_acumulada) / 0.40
+                if needed <= 0:
+                    min_needed = max(0.0, needed)
+                    parrafos.append(
+                        f"Con estas notas ya tienes garantizada la aprobación si sacas ≥ {min_needed:.1f} en Corte Final."
+                    )
+                else:
+                    parrafos.append(f"Para aprobar con 3.0 necesitas al menos {needed:.1f} en Corte Final.")
+
+        # 5. Recomendación accionable
+        c3_pendiente = c3 == 0.0
+        if nivel == "ALTO":
+            if not c3_pendiente:
+                parrafos.append("Consulta con tu docente sobre opciones de recuperación o habilitación.")
+            else:
+                hours = 10 if porcentaje >= 85 else 6
+                parrafos.append(
+                    f"Dedica al menos {hours} horas extras de preparación antes del corte final."
+                )
+        elif nivel == "MEDIO":
+            parrafos.append("Refuerza los temas donde estás por debajo del promedio y mantén la asistencia.")
         else:
-            lineas.append("No hay cohortes críticas por debajo de 3.0. Mantén el ritmo.")
+            parrafos.append("Sigue así — estás en posición favorable para aprobar con buena nota.")
 
-        return "\n".join(lineas)
+        return "\n\n".join(parrafos)
 
     def calcular_detalles_matematicos(
         self,

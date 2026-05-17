@@ -42,3 +42,7 @@ class User(SQLModel, table=True):
         default=None,
         sa_column=sa.Column(sa.DateTime(timezone=True), nullable=True),
     )
+    # Contacto y preferencias de notificación
+    phone: str | None = Field(default=None, nullable=True)
+    whatsapp_enabled: bool = Field(default=True, nullable=False)
+    email_enabled: bool = Field(default=True, nullable=False)

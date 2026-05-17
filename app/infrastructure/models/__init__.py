@@ -10,6 +10,9 @@ from app.infrastructure.models.consent import Consent
 from app.infrastructure.models.program import Program
 from app.infrastructure.models.student_profile import StudentProfile
 from app.infrastructure.models.referral import Referral
+from app.infrastructure.models.push_subscription import PushSubscription
+from app.infrastructure.models.attendance import ClassSession, Attendance
+from app.infrastructure.models.notification import Notification
 
 __all__ = [
     "User",
@@ -20,4 +23,8 @@ __all__ = [
     "Program",
     "StudentProfile",
     "Referral",
+    "PushSubscription",
+    "ClassSession",
+    "Attendance",
+    "Notification",
 ]

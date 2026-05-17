@@ -302,6 +302,26 @@ async def send_risk_alert(
         return False
 
 
+async def send_generic_notification(email: str, name: str, subject: str, body: str) -> bool:
+    """Envía una notificación genérica por correo (texto plano + fondo de marca)."""
+    html = f"""
+    <div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;background:#f8faf9;padding:32px 24px;border-radius:16px">
+      <div style="background:#00754a;border-radius:12px;padding:16px 20px;margin-bottom:24px">
+        <span style="color:white;font-size:18px;font-weight:800;letter-spacing:-0.5px">Academic Risk</span>
+      </div>
+      <h2 style="color:#1a2e23;font-size:18px;margin:0 0 12px">{subject}</h2>
+      <p style="color:#4a5568;font-size:15px;line-height:1.6;white-space:pre-wrap">{body}</p>
+      <hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0"/>
+      <p style="color:#9ca3af;font-size:12px;margin:0">Universidad de San Buenaventura · Sistema de predicción académica</p>
+    </div>"""
+    try:
+        await asyncio.to_thread(_send_email_sync, email, subject, html)
+        return True
+    except Exception as exc:
+        logger.error("Error send_generic_notification to %s: %s", email, exc)
+        return False
+
+
 async def send_predictor_reminder(student_email: str, student_name: str) -> bool:
     """
     Envía un recordatorio motivacional al estudiante para que use el predictor.

@@ -16,6 +16,8 @@ from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.schemas.user import (
@@ -29,14 +31,38 @@ from app.application.schemas.user import (
 from app.application.services.user_service import UserService
 from app.api.v1.dependencies.auth import (
     CurrentUser,
+    get_current_user,
     require_roles,
     require_self_or_roles,
 )
 from app.domain.enums import RoleEnum, UserStatusEnum
 from app.infrastructure.database import get_session
+from app.infrastructure.models.user import User
 from app.infrastructure.repositories.user_repository import UserRepository
 
 router = APIRouter()
+
+
+# ─── Self-profile update schema ───────────────────────────────────────────────
+
+class ProfileUpdate(BaseModel):
+    phone: Optional[str] = None
+    full_name: Optional[str] = None
+    whatsapp_enabled: Optional[bool] = None
+    email_enabled: Optional[bool] = None
+
+
+class ProfileRead(BaseModel):
+    id: UUID
+    full_name: str
+    email: str
+    phone: Optional[str]
+    whatsapp_enabled: bool
+    email_enabled: bool
+    role: str
+
+    class Config:
+        from_attributes = True
 
 
 def _get_service(session: AsyncSession = Depends(get_session)) -> UserService:
@@ -127,6 +153,61 @@ async def update_user(
 
 
 # ---------------------------------------------------------------------------
+# PATCH /users/{user_id}/status — ADMIN only
+# ---------------------------------------------------------------------------
+
+# PATCH /users/me/profile — cualquier usuario autenticado puede editar su perfil
+# ---------------------------------------------------------------------------
+
+@router.get("/users/me/profile", response_model=ProfileRead)
+async def get_my_profile(
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+) -> ProfileRead:
+    """Devuelve el perfil editable del usuario autenticado."""
+    result = await db.execute(select(User).where(User.id == current_user.id))
+    user = result.scalar_one()
+    return ProfileRead(
+        id=user.id,
+        full_name=user.full_name,
+        email=user.email,
+        phone=getattr(user, "phone", None),
+        whatsapp_enabled=getattr(user, "whatsapp_enabled", True),
+        email_enabled=getattr(user, "email_enabled", True),
+        role=user.role.value if hasattr(user.role, "value") else str(user.role),
+    )
+
+
+@router.patch("/users/me/profile", response_model=ProfileRead)
+async def update_my_profile(
+    body: ProfileUpdate,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+) -> ProfileRead:
+    """Permite al usuario actualizar su número de teléfono y preferencias de notificación."""
+    result = await db.execute(select(User).where(User.id == current_user.id))
+    user = result.scalar_one()
+    if body.phone is not None:
+        user.phone = body.phone.strip() or None
+    if body.full_name is not None and body.full_name.strip():
+        user.full_name = body.full_name.strip()
+    if body.whatsapp_enabled is not None:
+        user.whatsapp_enabled = body.whatsapp_enabled
+    if body.email_enabled is not None:
+        user.email_enabled = body.email_enabled
+    await db.commit()
+    await db.refresh(user)
+    return ProfileRead(
+        id=user.id,
+        full_name=user.full_name,
+        email=user.email,
+        phone=getattr(user, "phone", None),
+        whatsapp_enabled=getattr(user, "whatsapp_enabled", True),
+        email_enabled=getattr(user, "email_enabled", True),
+        role=user.role.value if hasattr(user.role, "value") else str(user.role),
+    )
+
+
 # PATCH /users/{user_id}/status — ADMIN only
 # ---------------------------------------------------------------------------
 
