@@ -1,0 +1,22 @@
+tests/property/test_uniqueness.py
+  s_b03b3a99345ebc::t_8c811e438c9bef 140,142-146,148-149,153,165,167,174-175,177,180-181
+tests/integration/test_consent_repository.py
+  s_b03b3a99345ebc::t_bf5c04cf33abdb 156,158
+  s_b03b3a99345ebc::t_c50f84b9c1ac4b 123-125,129-130,152-155,157,159
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "d02a9f84ea472d66db955ff57bd0b4623c174f58",
+  "prompts": {},
+  "sessions": {
+    "s_b03b3a99345ebc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "379dbf03-6b10-4ee4-83b4-56a99a81b41a",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "daforonda_meli <davidlujan.foronda@mercadolibre.com.co>"
+    }
+  }
+}
