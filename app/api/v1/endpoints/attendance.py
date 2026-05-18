@@ -545,3 +545,39 @@ async def get_course_sessions_history(
             attendees=attendees,
         ))
     return result
+
+
+# ─── QR Code image endpoint ───────────────────────────────────────────────────
+
+from fastapi.responses import Response as FastAPIResponse
+import io
+
+@router.get("/qr")
+async def generate_qr_image(data: str, size: int = 220):
+    """
+    Genera un QR code como imagen PNG a partir del texto `data`.
+    Usado por el frontend para renderizar QRs escaneables.
+    """
+    import qrcode
+    from qrcode.image.pil import PilImage
+
+    qr = qrcode.QRCode(
+        version=None,
+        error_correction=qrcode.constants.ERROR_CORRECT_M,
+        box_size=10,
+        border=4,
+    )
+    qr.add_data(data)
+    qr.make(fit=True)
+
+    img = qr.make_image(image_factory=PilImage)
+    img = img.resize((size, size))
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+
+    return FastAPIResponse(
+        content=buf.read(),
+        media_type="image/png",
+        headers={"Cache-Control": "no-store"},
+    )
