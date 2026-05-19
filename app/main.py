@@ -18,6 +18,7 @@ from app.api.v1.endpoints.templates import router as templates_router
 from app.api.v1.endpoints.push import router as push_router
 from app.api.v1.endpoints.attendance import router as attendance_router
 from app.api.v1.endpoints.inapp_notifications import router as inapp_notif_router
+from app.api.v1.endpoints.jobs import router as jobs_router
 
 try:
     from app.api.v1.endpoints import waha_webhook as _waha_mod
@@ -140,6 +141,7 @@ app.include_router(templates_router,     prefix="/api/v1", tags=["templates"])
 app.include_router(push_router,          prefix="/api/v1", tags=["Push Notifications"])
 app.include_router(attendance_router,    prefix="/api/v1", tags=["Attendance"])
 app.include_router(inapp_notif_router,   prefix="/api/v1", tags=["In-App Notifications"])
+app.include_router(jobs_router,          prefix="/api/v1", tags=["Admin — Jobs"])
 if _waha_loaded:
     app.include_router(_waha_mod.router, prefix="/api/v1", tags=["WhatsApp Bot"])
 
