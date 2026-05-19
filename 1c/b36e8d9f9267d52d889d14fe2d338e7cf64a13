@@ -1,0 +1,19 @@
+app/api/v1/endpoints/attendance.py
+  s_b03b3a99345ebc::t_a0a904aa4cb8c7 113-119,122
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.9",
+  "base_commit_sha": "1cb36e8d9f9267d52d889d14fe2d338e7cf64a13",
+  "prompts": {},
+  "sessions": {
+    "s_b03b3a99345ebc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "379dbf03-6b10-4ee4-83b4-56a99a81b41a",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "daforonda_meli <davidlujan.foronda@mercadolibre.com.co>"
+    }
+  }
+}
