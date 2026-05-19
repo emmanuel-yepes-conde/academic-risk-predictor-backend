@@ -110,10 +110,16 @@ def compute_qr_token(qr_seed: str, window_seconds: int, at: datetime | None = No
 
 
 def is_token_valid(qr_seed: str, window_seconds: int, token: str) -> bool:
-    """Acepta el token de la ventana actual y de la ventana anterior (tolerancia de 1)."""
+    """Acepta el token de la ventana actual, la anterior y la siguiente (tolerancia ±1).
+
+    La ventana +1 cubre el caso en que el reloj del navegador del profesor
+    vaya unos segundos adelantado al reloj del servidor: el frontend genera
+    un token para la ventana futura y sin esta tolerancia siempre expiraría
+    hasta que el servidor alcance esa ventana.
+    """
     now = datetime.now(timezone.utc)
     epoch = int(now.timestamp())
-    for offset in (0, -1):
+    for offset in (0, -1, +1):
         window_index = math.floor(epoch / window_seconds) + offset
         raw = f"{qr_seed}:{window_index}"
         expected = hashlib.sha256(raw.encode()).hexdigest()[:32]
