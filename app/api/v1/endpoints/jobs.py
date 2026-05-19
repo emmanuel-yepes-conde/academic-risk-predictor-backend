@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.v1.dependencies.auth import get_current_user, require_roles
 from app.core.config import settings
 from app.domain.enums import RoleEnum
-from app.infrastructure.database import get_db
+from app.infrastructure.database import get_session as get_db
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
