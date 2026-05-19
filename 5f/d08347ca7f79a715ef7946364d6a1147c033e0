@@ -1,0 +1,24 @@
+app/api/v1/endpoints/jobs.py
+  s_b03b3a99345ebc::t_2128f0526242ee 1-173
+alembic/versions/0026_add_job_configs.py
+  s_b03b3a99345ebc::t_7ef2c42b60f702 1-99
+app/main.py
+  s_b03b3a99345ebc::t_8aac50ffeb20da 21
+  s_b03b3a99345ebc::t_e9cf9e1fc120cb 144
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.9",
+  "base_commit_sha": "5fd08347ca7f79a715ef7946364d6a1147c033e0",
+  "prompts": {},
+  "sessions": {
+    "s_b03b3a99345ebc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "379dbf03-6b10-4ee4-83b4-56a99a81b41a",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "daforonda_meli <davidlujan.foronda@mercadolibre.com.co>"
+    }
+  }
+}
