@@ -530,25 +530,31 @@ async def calculate_enrollment_risk(
             detail="No hay notas registradas para esta inscripción",
         )
 
-    # 2. Extraer features desde columnas calculadas de la inscripción
-    if (
-        grades_data.first_cohort_grade is None
-        or grades_data.second_cohort_grade is None
-        or grades_data.third_cohort_grade is None
-        or grades_data.final_grade is None
-    ):
+    # 2. Extraer features — predicción parcial con imputación si faltan cortes
+    raw_c1    = float(grades_data.first_cohort_grade)  if grades_data.first_cohort_grade  is not None else None
+    raw_c2    = float(grades_data.second_cohort_grade) if grades_data.second_cohort_grade is not None else None
+    raw_c3    = float(grades_data.third_cohort_grade)  if grades_data.third_cohort_grade  is not None else None
+    raw_total = float(grades_data.final_grade)         if grades_data.final_grade         is not None else None
+
+    available_cohort_grades = [g for g in [raw_c1, raw_c2, raw_c3] if g is not None]
+    if not available_cohort_grades:
         raise HTTPException(
             status_code=422,
             detail=(
-                "Faltan notas por cohorte para calcular riesgo. "
-                "Verifica que estén registrados corte 1, corte 2, corte final y total."
+                "Aún no hay calificaciones registradas para este curso. "
+                "El docente debe ingresar al menos la nota del primer corte para activar el predictor."
             ),
         )
 
-    nota_corte_1 = float(grades_data.first_cohort_grade)
-    nota_corte_2 = float(grades_data.second_cohort_grade)
-    nota_corte_final = float(grades_data.third_cohort_grade)
-    nota_total = float(grades_data.final_grade)
+    # Impute missing cohort grades with the average of the available ones ("at current pace")
+    avg_available = round(sum(available_cohort_grades) / len(available_cohort_grades), 2)
+    nota_corte_1   = raw_c1    if raw_c1    is not None else avg_available
+    nota_corte_2   = raw_c2    if raw_c2    is not None else avg_available
+    nota_corte_final = raw_c3  if raw_c3    is not None else avg_available
+    nota_total     = raw_total if raw_total is not None else avg_available
+
+    is_partial = len(available_cohort_grades) < 3 or raw_total is None
+    cortes_disponibles = len(available_cohort_grades)
 
     feature_vector = [
         nota_corte_1,
@@ -582,6 +588,8 @@ async def calculate_enrollment_risk(
         porcentaje_riesgo=probabilidad_riesgo * 100,
         nivel_riesgo=nivel_riesgo,
         analisis_ia=analisis_ia,
+        is_partial=is_partial,
+        cortes_disponibles=cortes_disponibles,
         datos_radar={
             "labels": ["Corte 1", "Corte 2", "Corte final", "Total"],
             "estudiante": [

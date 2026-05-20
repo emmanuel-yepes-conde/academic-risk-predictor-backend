@@ -49,6 +49,9 @@ class PredictionOutput(BaseModel):
     analisis_ia: str
     datos_radar: Dict
     detalles_matematicos: Dict
+    # Predicción parcial: True cuando faltan cortes y se usaron valores imputados
+    is_partial: bool = Field(default=False, description="True si la predicción usa notas imputadas por falta de datos")
+    cortes_disponibles: int = Field(default=3, description="Número de cortes con nota real (0-3)")
 
 
 class CohortRiskInput(BaseModel):
