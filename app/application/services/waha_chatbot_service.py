@@ -123,22 +123,43 @@ class WahaChatbotService:
         enrollments: List[dict] = state.get("enrollments", [])
         student_name: str = state.get("student_name", "")
 
+        # Intentar primero como número
         try:
             selection = int(text)
+            if selection < 1 or selection > len(enrollments):
+                return (
+                    f"Selección inválida. Elige un número entre *1* y *{len(enrollments)}*.\n"
+                    "Escribe *0* para reiniciar."
+                )
+            enroll = enrollments[selection - 1]
+
         except ValueError:
-            return (
-                "Por favor responde con el *número* de la materia que deseas analizar.\n"
-                "Ejemplo: *1*\n\n"
-                "Escribe *0* para analizar otro estudiante."
-            )
+            # No es número → buscar por texto en nombre o código de la materia
+            query = text.lower().strip()
+            matches = [
+                (i + 1, e)
+                for i, e in enumerate(enrollments)
+                if query in e["subject_name"].lower() or query in e["subject_code"].lower()
+            ]
 
-        if selection < 1 or selection > len(enrollments):
-            return (
-                f"Selección inválida. Elige un número entre *1* y *{len(enrollments)}*.\n"
-                "Escribe *0* para reiniciar."
-            )
+            if len(matches) == 0:
+                # Ninguna coincidencia → mostrar menú de nuevo
+                return (
+                    f"No encontré ninguna materia con el nombre '{text}'.\n\n"
+                    + self._build_subject_menu(student_name, enrollments)
+                )
 
-        enroll = enrollments[selection - 1]
+            if len(matches) > 1:
+                # Varias coincidencias → pedir que especifique
+                lines = [f"Encontré {len(matches)} materias que coinciden con '{text}':",""]
+                for num, e in matches:
+                    lines.append(f"  *{num}.* {e['subject_name']} ({e['subject_code']})")
+                lines += ["", "Responde con el *número* de la que deseas analizar."]
+                return "\n".join(lines)
+
+            # Coincidencia única → proceder directamente
+            _num, enroll = matches[0]
+
         analysis = await self._run_prediction(enroll, student_name)
 
         # Reset timeout after answering
