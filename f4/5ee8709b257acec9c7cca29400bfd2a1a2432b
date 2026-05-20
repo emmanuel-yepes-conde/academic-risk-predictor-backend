@@ -1,0 +1,29 @@
+.github/workflows/cd.yml
+  s_b03b3a99345ebc::t_4fbf02005b243e 149-154
+  s_b03b3a99345ebc::t_00c170d6304794 42-44
+app/application/schemas/user.py
+  s_b03b3a99345ebc::t_c5c7d88189bdf2 44-45
+infra/deploy.sh
+  s_b03b3a99345ebc::t_bb370c7f5b4a5f 314-316
+  s_b03b3a99345ebc::t_23e187f3983ee8 343-345
+  s_b03b3a99345ebc::t_093253b10622f3 377-379
+app/infrastructure/repositories/course_repository.py
+  s_b03b3a99345ebc::t_79c1b1e95be9bb 194,201-213
+  s_b03b3a99345ebc::t_941be073330e10 17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.11",
+  "base_commit_sha": "f45ee8709b257acec9c7cca29400bfd2a1a2432b",
+  "prompts": {},
+  "sessions": {
+    "s_b03b3a99345ebc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "379dbf03-6b10-4ee4-83b4-56a99a81b41a",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "daforonda_meli <davidlujan.foronda@mercadolibre.com.co>"
+    }
+  }
+}
