@@ -67,6 +67,18 @@ async def lifespan(app: FastAPI):
     else:
         print("⏸️  MONITOR desactivado (MONITORING_ENABLED=false)", flush=True)
 
+    # ── APScheduler — cron jobs reales (risk-alerts, class-crisis) ──────────
+    try:
+        from app.services.scheduler_service import start_scheduler
+        _ascheduler = await start_scheduler(engine)
+        print(
+            f"✅ SCHEDULER iniciado — {len(_ascheduler.get_jobs())} job(s) programados",
+            flush=True,
+        )
+    except Exception as _sched_err:
+        print(f"⚠️  SCHEDULER no pudo iniciarse: {_sched_err}", flush=True)
+        _ascheduler = None
+
     print("="*80 + "\n")
     yield
     print("\n" + "="*80)
@@ -77,6 +89,11 @@ async def lifespan(app: FastAPI):
             await _monitoring_task
         except asyncio.CancelledError:
             pass
+    try:
+        from app.services.scheduler_service import stop_scheduler
+        stop_scheduler()
+    except Exception:
+        pass
     await engine.dispose()
     print("="*80 + "\n")
 

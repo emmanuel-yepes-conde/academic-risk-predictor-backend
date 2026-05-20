@@ -644,11 +644,33 @@ def _referral_consejeria_html(
 
 
 # ============================================================================
-# ENVÍO ACS
+# ROUTING POR DOMINIO
 # ============================================================================
+
+# Dominios institucionales → Azure Communication Services (ACS)
+# Cualquier otro dominio (Gmail, Hotmail, Yahoo, etc.) → SMTP
+_INSTITUTIONAL_DOMAINS: frozenset[str] = frozenset({
+    "uniminuto.edu.co",
+    "uniminuto.edu",
+})
+
 
 def _is_configured() -> bool:
     return bool(getattr(settings, "ACS_CONNECTION_STRING", None))
+
+
+def _is_institutional(email: str) -> bool:
+    """Retorna True si el correo pertenece a un dominio institucional."""
+    try:
+        domain = email.strip().lower().split("@", 1)[1]
+        return domain in _INSTITUTIONAL_DOMAINS
+    except (IndexError, AttributeError):
+        return False
+
+
+# ============================================================================
+# ENVÍO ACS
+# ============================================================================
 
 
 async def _send_acs(
@@ -688,28 +710,39 @@ async def _send_acs(
 
 async def _dispatch(to_email: str, subject: str, html_content: str) -> bool:
     """
-    Plan A → ACS.  Plan B → SMTP (fallback automático si ACS falla o no está configurado).
-    Nunca lanza excepciones; retorna False si ambos canales fallan.
+    Routing de email por dominio del destinatario:
+
+    • @uniminuto.edu.co / @uniminuto.edu  →  Azure Communication Services (ACS)
+      (con fallback a SMTP si ACS falla o no está configurado)
+    • Cualquier otro dominio              →  SMTP directamente
+
+    Nunca lanza excepciones; retorna False si el canal elegido falla.
     """
-    # ── Plan A: ACS ──────────────────────────────────────────────────────────
-    if _is_configured():
+    use_acs = _is_configured() and _is_institutional(to_email)
+
+    # ── ACS para correos institucionales ─────────────────────────────────────
+    if use_acs:
         ok = await _send_acs(to_email, subject, html_content)
         if ok:
             return True
         logger.warning(
-            "ACS falló para %s — activando fallback SMTP", to_email
+            "ACS falló para %s (%s) — activando fallback SMTP",
+            to_email, "institucional",
         )
 
-    # ── Plan B: SMTP ─────────────────────────────────────────────────────────
+    # ── SMTP para externos (o fallback de ACS) ────────────────────────────────
     try:
         from app.services.email_service import _send_email_sync  # import diferido
         await asyncio.to_thread(_send_email_sync, to_email, subject, html_content)
-        logger.info("SMTP fallback OK para %s — %s", to_email, subject)
+        logger.info(
+            "SMTP enviado a %s [%s] — %s",
+            to_email,
+            "fallback" if use_acs else "externo",
+            subject,
+        )
         return True
     except Exception as exc:
-        logger.error(
-            "SMTP fallback también falló para %s: %s", to_email, exc, exc_info=True
-        )
+        logger.error("SMTP falló para %s: %s", to_email, exc, exc_info=True)
         return False
 
 

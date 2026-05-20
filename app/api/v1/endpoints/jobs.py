@@ -52,6 +52,11 @@ class JobUpdate(BaseModel):
     enabled:     bool | None = None
 
 
+class JobTestPayload(BaseModel):
+    email: str | None = None
+    phone: str | None = None
+
+
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
 async def _get_job(job_id: str, db: AsyncSession) -> dict:
@@ -113,6 +118,16 @@ async def update_job(
         updates,
     )
     await db.commit()
+
+    # Actualizar el scheduler en caliente si cambió cron_expr o enabled
+    if "cron_expr" in updates or "enabled" in updates:
+        try:
+            from app.infrastructure.database import engine
+            from app.services.scheduler_service import reload_job
+            await reload_job(engine, job_id)
+        except Exception as _reload_err:
+            logger.warning("[Jobs] No se pudo recargar scheduler para %s: %s", job_id, _reload_err)
+
     return await _get_job(job_id, db)
 
 
@@ -171,3 +186,120 @@ async def trigger_job(
     await db.commit()
 
     return {"ok": True, "message": result_msg}
+
+
+@router.post(
+    "/admin/jobs/{job_id}/test",
+    summary="Enviar notificación de prueba de un job",
+    tags=["Admin — Jobs"],
+)
+async def test_job(
+    job_id: str,
+    body: JobTestPayload,
+    current_user=Depends(require_roles(RoleEnum.ADMIN)),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Envía una notificación de prueba al email y/o teléfono indicados,
+    simulando lo que haría el job cuando se ejecute en producción.
+    """
+    job = await _get_job(job_id, db)
+
+    if not body.email and not body.phone:
+        raise HTTPException(
+            status_code=422,
+            detail="Debes proporcionar al menos un email o número de teléfono para la prueba",
+        )
+
+    sent_channels: list[str] = []
+
+    try:
+        # ── Email de prueba ──────────────────────────────────────────────────
+        if body.email:
+            from app.services.acs_email_service import _dispatch
+            subject = f"[PRUEBA] {job['name']} — Academic Risk"
+            html = f"""<!DOCTYPE html><html><body
+              style="margin:0;padding:24px;background:#f8fafc;
+                     font-family:Arial,Helvetica,sans-serif;">
+              <div style="max-width:520px;margin:0 auto;background:#fff;
+                          border-radius:12px;padding:32px;
+                          box-shadow:0 2px 12px rgba(0,0,0,0.08);">
+                <div style="background:#1E3932;border-radius:8px;
+                            padding:14px 20px;margin-bottom:24px;">
+                  <span style="color:#fff;font-size:15px;font-weight:700;">
+                    Academic <span style="color:#d4e9e2;">Risk</span>
+                    <span style="background:#D97706;color:#fff;font-size:10px;
+                                 font-weight:700;padding:3px 10px;border-radius:10px;
+                                 margin-left:10px;letter-spacing:0.5px;">PRUEBA</span>
+                  </span>
+                </div>
+                <h2 style="color:#1E3932;font-size:17px;margin:0 0 8px 0;">
+                  Notificación de prueba
+                </h2>
+                <p style="color:#4a5568;font-size:14px;line-height:1.7;margin:0 0 16px 0;">
+                  Este es un mensaje de prueba para el job
+                  <strong>{job['name']}</strong>.
+                </p>
+                <div style="background:#f0fdf4;border-left:4px solid #00754A;
+                            border-radius:6px;padding:14px 16px;">
+                  <p style="margin:0;font-size:13px;color:#1E3932;">
+                    <strong>Job:</strong> {job['name']}<br/>
+                    <strong>Tipo:</strong> {job['job_type']}<br/>
+                    <strong>Canales:</strong> {", ".join(job.get("channels") or ["—"])}<br/>
+                    <strong>Descripción:</strong> {job['description']}
+                  </p>
+                </div>
+                <hr style="border:none;border-top:1px solid #e2e8f0;margin:20px 0 0 0"/>
+                <p style="color:#9ca3af;font-size:11px;margin:14px 0 0 0;">
+                  Enviado desde el panel de administración de Academic Risk
+                </p>
+              </div>
+            </body></html>"""
+            ok = await _dispatch(to_email=body.email, subject=subject, html_content=html)
+            if ok:
+                sent_channels.append(f"email → {body.email}")
+            else:
+                logger.warning("[Jobs/test] Email falló para %s", body.email)
+
+        # ── WhatsApp de prueba ───────────────────────────────────────────────
+        if body.phone:
+            try:
+                import httpx
+                numero = body.phone.strip().replace(" ", "").replace("-", "").replace("+", "")
+                if not numero.startswith("57") and len(numero) == 10:
+                    numero = f"57{numero}"
+                texto = (
+                    f"🧪 *[PRUEBA] {job['name']} — Academic Risk*\n\n"
+                    f"Este es un mensaje de prueba para el job "
+                    f"*{job['name']}*.\n\n"
+                    f"📋 *Descripción:* {job['description']}\n"
+                    f"📡 *Canales:* {', '.join(job.get('channels') or ['—'])}\n\n"
+                    f"_Enviado desde el panel de administración_"
+                )
+                async with httpx.AsyncClient(timeout=10) as client:
+                    resp = await client.post(
+                        f"{settings.WAHA_URL.rstrip('/')}/api/sendText",
+                        json={"chatId": f"{numero}@c.us", "text": texto, "session": "default"},
+                        headers={"X-Api-Key": settings.WAHA_API_KEY},
+                    )
+                if resp.status_code < 400:
+                    sent_channels.append(f"whatsapp → {body.phone}")
+                else:
+                    logger.warning("[Jobs/test] WhatsApp respondió %s", resp.status_code)
+            except Exception as wa_exc:
+                logger.warning("[Jobs/test] WhatsApp falló: %s", wa_exc)
+
+    except Exception as exc:
+        logger.error("[Jobs/test] Error en prueba de %s: %s", job_id, exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    if not sent_channels:
+        raise HTTPException(
+            status_code=502,
+            detail="No se pudo enviar la prueba por ningún canal. Verifica la configuración.",
+        )
+
+    return {
+        "ok": True,
+        "message": f"Prueba enviada correctamente → {', '.join(sent_channels)}",
+    }
