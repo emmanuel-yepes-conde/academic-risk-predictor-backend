@@ -39,6 +39,9 @@ jobs:
         env:
           WAHA_URL: ${{ secrets.WAHA_URL }}
           WAHA_API_KEY: ${{ secrets.WAHA_API_KEY }}
+          VAPID_PRIVATE_KEY_B64: ${{ secrets.VAPID_PRIVATE_KEY_B64 }}
+          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+          VAPID_CONTACT_EMAIL: ${{ secrets.VAPID_CONTACT_EMAIL }}
         run: |
           bash infra/deploy.sh \
             -e dev \
@@ -143,6 +146,12 @@ jobs:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Desplegar en Prod
+        env:
+          WAHA_URL: ${{ secrets.WAHA_URL }}
+          WAHA_API_KEY: ${{ secrets.WAHA_API_KEY }}
+          VAPID_PRIVATE_KEY_B64: ${{ secrets.VAPID_PRIVATE_KEY_B64 }}
+          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+          VAPID_CONTACT_EMAIL: ${{ secrets.VAPID_CONTACT_EMAIL }}
         run: |
           bash infra/deploy.sh \
             -e prod \

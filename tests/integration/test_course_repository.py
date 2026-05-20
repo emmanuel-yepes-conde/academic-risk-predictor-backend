@@ -185,10 +185,22 @@ async def test_listar_estudiantes_inscritos():
     student = _make_student(full_name="Enrolled Student")
     course_id = uuid.uuid4()
 
+    # La implementación hace dos execute():
+    #   1ª llamada → query de usuarios inscritos (devuelve [student])
+    #   2ª llamada → query de StudentProfile para enriquecer con student_institutional_id
+    #                (devuelve [] para no mezclar objetos User con el mock)
+    _call_count = 0
+
     async def _execute(stmt, *args, **kwargs):
+        nonlocal _call_count
+        _call_count += 1
         result = MagicMock()
-        result.scalar_one_or_none.return_value = student
-        result.scalars.return_value.all.return_value = [student]
+        if _call_count == 1:
+            # Query principal: usuarios inscritos
+            result.scalars.return_value.all.return_value = [student]
+        else:
+            # Query secundaria: StudentProfile — sin datos de prueba
+            result.scalars.return_value.all.return_value = []
         return result
 
     session = make_mock_session()

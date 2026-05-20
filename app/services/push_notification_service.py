@@ -87,9 +87,10 @@ async def send_push_to_user(
 
     # Decodificar clave privada VAPID desde base64
     try:
-        der_bytes = base64.urlsafe_b64decode(
-            settings.VAPID_PRIVATE_KEY_B64 + "=="  # padding
-        )
+        key_b64 = settings.VAPID_PRIVATE_KEY_B64
+        # Añadir padding correcto (sin este cálculo base64 falla si ya tiene '=')
+        key_b64 += "=" * (-len(key_b64) % 4)
+        der_bytes = base64.urlsafe_b64decode(key_b64)
         private_key = load_der_private_key(der_bytes, password=None, backend=default_backend())
         vapid_private_pem = private_key.private_bytes(
             encoding=Encoding.PEM,

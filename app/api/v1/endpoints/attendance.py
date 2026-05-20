@@ -316,17 +316,42 @@ async def register_attendance(
     db.add(attendance)
     await db.commit()
 
-    # 7. Enviar WhatsApp de confirmación al estudiante (en background)
-    if current_user.phone:
-        # Obtener nombre del curso
-        from app.infrastructure.models.course import Course
-        from app.infrastructure.models.subject import Subject
-        course_q = await db.execute(
-            select(Subject.name)
-            .join(Course, Course.subject_id == Subject.id)
-            .where(Course.id == session.course_id)
+    # 7. Hora Colombia (se usa en mensajes de respuesta y notificaciones)
+    recorded_utc = attendance.recorded_at.replace(tzinfo=timezone.utc)
+    col_time = recorded_utc.astimezone(COLOMBIA_TZ)
+    hora_col = col_time.strftime("%I:%M %p").lower()
+
+    # 8. Obtener nombre del curso (necesario para WhatsApp e in-app)
+    from app.infrastructure.models.course import Course
+    from app.infrastructure.models.subject import Subject
+    course_q = await db.execute(
+        select(Subject.name)
+        .join(Course, Course.subject_id == Subject.id)
+        .where(Course.id == session.course_id)
+    )
+    course_name = course_q.scalar_one_or_none() or "tu materia"
+
+    # 9. Notificación in-app (campanita) — síncrona para que aparezca de inmediato
+    try:
+        from app.services.notification_service import notify
+        await notify(
+            db=db,
+            user=current_user,
+            type="ATTENDANCE",
+            title="✅ Asistencia registrada",
+            body=f"Tu asistencia a {course_name} fue registrada correctamente · {hora_col}",
+            data={
+                "session_id": str(session_id),
+                "course_id":  str(session.course_id),
+            },
+            send_whatsapp=False,   # WhatsApp se envía por separado abajo
+            send_email=False,
         )
-        course_name = course_q.scalar_one_or_none() or "tu materia"
+    except Exception as _notif_err:
+        logger.warning("[Attendance] in-app notify falló: %s", _notif_err)
+
+    # 10. WhatsApp de confirmación al estudiante (en background)
+    if current_user.phone:
         background_tasks.add_task(
             _send_whatsapp_attendance,
             phone=current_user.phone,
@@ -335,11 +360,6 @@ async def register_attendance(
             session_label=session.label,
             recorded_at=attendance.recorded_at,
         )
-
-    # Hora en Colombia para el mensaje de éxito (DB guarda UTC sin timezone info)
-    recorded_utc = attendance.recorded_at.replace(tzinfo=timezone.utc)
-    col_time = recorded_utc.astimezone(COLOMBIA_TZ)
-    hora_col = col_time.strftime("%I:%M %p").lower()
 
     return {
         "ok": True,

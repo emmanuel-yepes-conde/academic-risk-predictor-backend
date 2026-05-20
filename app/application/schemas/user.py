@@ -41,6 +41,8 @@ class UserRead(BaseModel):
     created_at: datetime
     updated_at: datetime
     last_login: datetime | None = None
+    # Campo opcional — se puebla desde StudentProfile cuando está disponible
+    student_institutional_id: str | None = None
 
     model_config = {"from_attributes": True}
 

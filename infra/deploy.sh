@@ -311,6 +311,9 @@ deploy() {
     local image_full="${acr_login_server}/mpra-backend:${deploy_tag}"
     local waha_url="${WAHA_URL:-}"
     local waha_api_key="${WAHA_API_KEY:-}"
+    local vapid_private_key_b64="${VAPID_PRIVATE_KEY_B64:-}"
+    local vapid_public_key="${VAPID_PUBLIC_KEY:-}"
+    local vapid_contact_email="${VAPID_CONTACT_EMAIL:-}"
 
     local fqdn
 
@@ -337,6 +340,9 @@ deploy() {
                 "CORS_ORIGIN_REGEX=https://.*\.vercel\.app" \
                 "WAHA_URL=${waha_url}" \
                 "WAHA_API_KEY=${waha_api_key}" \
+                "VAPID_PRIVATE_KEY_B64=${vapid_private_key_b64}" \
+                "VAPID_PUBLIC_KEY=${vapid_public_key}" \
+                "VAPID_CONTACT_EMAIL=${vapid_contact_email}" \
             --output none
     else
         log_info "Creando Container App '${ca_name}' con imagen MPRA..."
@@ -368,6 +374,9 @@ deploy() {
                 "DATASET_PATH=datasets/dataset_estudiantes_decimal.csv" \
                 "WAHA_URL=${waha_url}" \
                 "WAHA_API_KEY=${waha_api_key}" \
+                "VAPID_PRIVATE_KEY_B64=${vapid_private_key_b64}" \
+                "VAPID_PUBLIC_KEY=${vapid_public_key}" \
+                "VAPID_CONTACT_EMAIL=${vapid_contact_email}" \
             --output none
 
         fqdn=$(az containerapp show \

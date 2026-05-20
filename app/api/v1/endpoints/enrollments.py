@@ -438,6 +438,24 @@ async def _push_risk_alert_if_needed(
                     f"en curso {course_name}"
                 )
 
+            # Notificación in-app (campanita) — siempre se crea, haya push o no
+            try:
+                from app.services.notification_service import notify_by_user_id
+                await notify_by_user_id(
+                    db=bg_session,
+                    user_id=enrollment.student_id,
+                    type="RISK_ALTO",
+                    title=msg["title"],
+                    body=msg["body"],
+                    data={
+                        "course_id": str(enrollment.course_id),
+                        "url":       msg["url"],
+                        "risk_pct":  round(result["probability"] * 100, 1),
+                    },
+                )
+            except Exception as _notif_err:
+                logger.warning("[Push] in-app notify_by_user_id falló: %s", _notif_err)
+
             # ── WhatsApp al estudiante (análisis completo) ────────────────────
             if student_phone and settings.WAHA_URL:
                 await _send_whatsapp_risk_alert(
