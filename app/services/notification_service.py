@@ -33,12 +33,14 @@ logger = logging.getLogger(__name__)
 
 # Prefijos de texto por tipo para el mensaje WhatsApp (sin emojis)
 _WA_ICON = {
-    "RISK_ALTO":      "[RIESGO ALTO]",
-    "RISK_RECOVERED": "[RIESGO BAJO]",
-    "ATTENDANCE":     "[ASISTENCIA]",
-    "GRADE_UPDATE":   "[NOTAS]",
-    "CLASS_CRISIS":   "[ALERTA DE CLASE]",
-    "SYSTEM":         "[SISTEMA]",
+    "RISK_ALTO":      "🔴",
+    "RISK_MEDIO":     "🟡",
+    "RISK_BAJO":      "🟢",
+    "RISK_RECOVERED": "🟢",
+    "ATTENDANCE":     "✅",
+    "GRADE_UPDATE":   "📝",
+    "CLASS_CRISIS":   "⚠️",
+    "SYSTEM":         "ℹ️",
 }
 
 
@@ -116,7 +118,7 @@ async def _send_whatsapp(phone: str, type: str, title: str, body: str) -> None:
     numero = phone.strip().replace(" ", "").replace("-", "").replace("+", "")
     if not numero.startswith("57") and len(numero) == 10:
         numero = f"57{numero}"
-    prefix = _WA_ICON.get(type, "[NOTIFICACIÓN]")
+    prefix = _WA_ICON.get(type, "ℹ️")
     texto = f"{prefix} *{title}*\n\n{body}"
     chat_id = f"{numero}@c.us"
     try:

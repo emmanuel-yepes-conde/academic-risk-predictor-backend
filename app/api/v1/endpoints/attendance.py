@@ -72,15 +72,16 @@ async def _send_whatsapp_attendance(
             numero = f"57{numero}"
         chat_id = f"{numero}@c.us"
 
-        clase_info = f"_{session_label}_" if session_label else "la clase"
-        fecha_hora = _fmt_colombia(recorded_at)
+        primer_nombre = student_name.split()[0] if student_name else "estudiante"
+        clase_info    = session_label if session_label else course_name
+        fecha_hora    = _fmt_colombia(recorded_at)
 
         texto = (
-            f"*Asistencia registrada — {course_name}*\n\n"
-            f"Hola {student_name.split()[0]}, tu asistencia a {clase_info} "
-            f"ha sido registrada exitosamente.\n\n"
-            f"*Fecha y hora:* {fecha_hora}\n\n"
-            f"_Sistema de seguimiento académico USB_"
+            f"✅ *Asistencia registrada*\n\n"
+            f"Hola {primer_nombre}! Tu presencia en *{clase_info}* quedó registrada.\n\n"
+            f"📚 *Materia:* {course_name}\n"
+            f"🕐 *Fecha y hora:* {fecha_hora}\n\n"
+            f"La constancia en clase hace parte de tu seguimiento académico. Sigue así!"
         )
 
         import httpx
@@ -501,7 +502,7 @@ async def notify_manual_attendance(
             user=student,
             type="ATTENDANCE",
             title="Asistencia registrada",
-            body=f"Tu asistencia a *{body.course_name}* fue registrada por tu docente · {hora_col}",
+            body=f"Tu docente registró tu asistencia a *{body.course_name}* el {hora_col}. Que sigan así de juiciosos! 💪",
             data={"course_name": body.course_name, "cohort": body.cohort},
             send_whatsapp=True,
         )

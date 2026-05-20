@@ -306,18 +306,18 @@ class WahaChatbotService:
     @staticmethod
     def _greeting() -> str:
         return (
-            "Hola! Soy *Risko*, tu asistente virtual de *Academic Risk*.\n\n"
-            "Por favor, ingresa tu *numero de documento* de identidad "
-            "(cedula o TI) para comenzar el analisis."
+            "👋 Hola! Soy *Risko*, tu asistente de *Academic Risk*.\n\n"
+            "Estoy aqui para ayudarte a revisar tu rendimiento academico.\n\n"
+            "Para comenzar, ingresa tu *numero de documento* de identidad (cedula o TI)."
         )
 
     @staticmethod
     def _goodbye(name: str) -> str:
         first = name.split()[0] if name else "estudiante"
         return (
-            f"Un placer ayudarte, {first}! "
-            "Si necesitas revisar tus notas de nuevo, escribe *hola* cuando quieras. "
-            "Exitos en tu semestre!"
+            f"Fue un placer ayudarte, {first}! 🎓\n\n"
+            "Recuerda que puedes escribir *hola* en cualquier momento "
+            "para revisar tu progreso. Mucho exito en tu semestre!"
         )
 
     @staticmethod
@@ -361,8 +361,8 @@ async def check_chatbot_timeouts() -> None:
             name = state.get("student_name", "")
             first = name.split()[0] if name else "estudiante"
             msg = (
-                f"Hola {first}, hay algo mas en que te podamos ayudar?\n\n"
-                "Escribe el numero de otra materia para analizarla, "
+                f"Hola {first}! 👋 ¿Hay algo mas en lo que te podamos ayudar?\n\n"
+                "Escribe el *numero* de otra materia para analizarla, "
                 "o *0* si ya terminaste."
             )
             await _send_wa(phone, msg)
@@ -374,9 +374,9 @@ async def check_chatbot_timeouts() -> None:
             name = state.get("student_name", "")
             first = name.split()[0] if name else "estudiante"
             msg = (
-                f"Parece que ya no necesitas mas ayuda por ahora. "
-                f"Mucho exito en tu semestre, {first}! "
-                "Escribe *hola* cuando quieras volver."
+                f"Fue un gusto ayudarte, {first}! 🎓\n\n"
+                f"Mucho exito en tu semestre. Recuerda que puedes escribir *hola* "
+                "cuando quieras revisar tu progreso academico."
             )
             await _send_wa(phone, msg)
             to_delete.append(phone)
