@@ -1,0 +1,37 @@
+app/api/v1/endpoints/attendance.py
+  s_b03b3a99345ebc::t_96619592d2cd8d 334,337,342-343,352-375,387-401
+  s_b03b3a99345ebc::t_cc0a866a72b5a9 466-513
+  s_b03b3a99345ebc::t_a3f5e2b53286ad 79,82
+  s_b03b3a99345ebc::t_57eefe383ee3f0 405
+app/services/notification_service.py
+  s_b03b3a99345ebc::t_46a283c30800be 114,119-137
+  s_b03b3a99345ebc::t_a4de98d66e42bb 34,36-41
+app/application/services/waha_chatbot_service.py
+  s_b03b3a99345ebc::t_44e79cda5db446 5-10,15-16,33-34,38-43,55-58,66,70-72,101,111-113,144-147,155-168,219,225-233,236-239,241-277,279,288-299,305,314,320-382,391,393-394
+app/services/scheduler_service.py
+  s_b03b3a99345ebc::t_9691c132c3e302 57-65,68-70
+  s_b03b3a99345ebc::t_22683fba6c2273 109-117
+app/schemas/student.py
+  s_b03b3a99345ebc::t_07d40ff8b39729 52-54
+app/api/v1/endpoints/enrollments.py
+  s_b03b3a99345ebc::t_2aeedbf5c6d5d5 533-540,544-545,549-557
+  s_b03b3a99345ebc::t_fe164d389def83 591-592
+alembic/versions/0027_update_job_titles.py
+  s_b03b3a99345ebc::t_7ffe2defe6ef8a 1-100
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.11",
+  "base_commit_sha": "f6e63e5b29810dd711acd8c75b32bff35fadff23",
+  "prompts": {},
+  "sessions": {
+    "s_b03b3a99345ebc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "379dbf03-6b10-4ee4-83b4-56a99a81b41a",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "daforonda_meli <davidlujan.foronda@mercadolibre.com.co>"
+    }
+  }
+}
