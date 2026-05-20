@@ -1,0 +1,26 @@
+app/application/services/waha_chatbot_service.py
+  s_b03b3a99345ebc::t_7c459d302044f3 126,129-134,136-161
+app/api/v1/endpoints/enrollments.py
+  s_b03b3a99345ebc::t_78c3789bdf3fe1 307,311,315-318,326,328-330,332,345-392,399-439,442-451,453
+  s_b03b3a99345ebc::t_26a3b38116eb52 440-441
+  s_b03b3a99345ebc::t_5eee781f0c54ef 632-633
+  s_b03b3a99345ebc::t_5aa2102d40eb54 578
+  s_b03b3a99345ebc::t_61cf479e17c997 701,726-736
+  s_b03b3a99345ebc::t_4af348a40e95dd 393-398
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.11",
+  "base_commit_sha": "4682ef849c73253ec0f1d7fa26c3e98063d07b31",
+  "prompts": {},
+  "sessions": {
+    "s_b03b3a99345ebc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "379dbf03-6b10-4ee4-83b4-56a99a81b41a",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "daforonda_meli <davidlujan.foronda@mercadolibre.com.co>"
+    }
+  }
+}
