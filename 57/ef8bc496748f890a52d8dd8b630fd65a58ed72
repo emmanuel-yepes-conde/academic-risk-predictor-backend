@@ -1,0 +1,24 @@
+app/api/v1/endpoints/enrollments.py
+  s_b03b3a99345ebc::t_53db4ce176c6ff 302-326
+  s_b03b3a99345ebc::t_36488d79a04d26 382-386,395,404,414-435,438-445,447-449,451-452,454,459-462,464-497,501
+app/services/notification_service.py
+  s_b03b3a99345ebc::t_7bdfcffeef03df 37-38
+app/services/push_notification_service.py
+  s_b03b3a99345ebc::t_4f7b5d83b0ded4 159,164-165,168
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.11",
+  "base_commit_sha": "57ef8bc496748f890a52d8dd8b630fd65a58ed72",
+  "prompts": {},
+  "sessions": {
+    "s_b03b3a99345ebc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "379dbf03-6b10-4ee4-83b4-56a99a81b41a",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "daforonda_meli <davidlujan.foronda@mercadolibre.com.co>"
+    }
+  }
+}
