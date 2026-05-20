@@ -1,0 +1,30 @@
+app/api/v1/endpoints/enrollments.py
+  s_b03b3a99345ebc::t_14d2453103b35e 472,475-478
+  s_b03b3a99345ebc::t_81ce685396111a 350-352,355-357,359
+app/services/notification_service.py
+  s_b03b3a99345ebc::t_7ad1b46aa00c21 121
+  s_b03b3a99345ebc::t_c78ad0c8e855f3 36-43
+app/api/v1/endpoints/attendance.py
+  s_b03b3a99345ebc::t_c2e6f8cf4883c2 505
+  s_b03b3a99345ebc::t_aa550456a17014 80-84
+app/application/services/waha_chatbot_service.py
+  s_b03b3a99345ebc::t_1881018caca84c 309-311,318-320
+  s_b03b3a99345ebc::t_01998f529cc809 364-365
+  s_b03b3a99345ebc::t_636fa0097f95b6 377-379
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.11",
+  "base_commit_sha": "face04bf736b4865b70013ceddfd6af6d9dc6304",
+  "prompts": {},
+  "sessions": {
+    "s_b03b3a99345ebc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "379dbf03-6b10-4ee4-83b4-56a99a81b41a",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "daforonda_meli <davidlujan.foronda@mercadolibre.com.co>"
+    }
+  }
+}
