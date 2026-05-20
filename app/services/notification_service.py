@@ -31,14 +31,14 @@ from app.infrastructure.models.user import User
 
 logger = logging.getLogger(__name__)
 
-# Iconos por tipo para el mensaje WhatsApp
+# Prefijos de texto por tipo para el mensaje WhatsApp (sin emojis)
 _WA_ICON = {
-    "RISK_ALTO":     "🔴",
-    "RISK_RECOVERED": "🟢",
-    "ATTENDANCE":    "✅",
-    "GRADE_UPDATE":  "📝",
-    "CLASS_CRISIS":  "⚠️",
-    "SYSTEM":        "🔔",
+    "RISK_ALTO":      "[RIESGO ALTO]",
+    "RISK_RECOVERED": "[RIESGO BAJO]",
+    "ATTENDANCE":     "[ASISTENCIA]",
+    "GRADE_UPDATE":   "[NOTAS]",
+    "CLASS_CRISIS":   "[ALERTA DE CLASE]",
+    "SYSTEM":         "[SISTEMA]",
 }
 
 
@@ -111,18 +111,30 @@ async def notify_by_user_id(
 
 async def _send_whatsapp(phone: str, type: str, title: str, body: str) -> None:
     if not settings.WAHA_URL:
+        logger.warning("[notify] WAHA_URL no configurado — WhatsApp no enviado (type=%s)", type)
         return
     numero = phone.strip().replace(" ", "").replace("-", "").replace("+", "")
     if not numero.startswith("57") and len(numero) == 10:
         numero = f"57{numero}"
-    icon = _WA_ICON.get(type, "🔔")
-    texto = f"{icon} *{title}*\n\n{body}"
-    async with httpx.AsyncClient(timeout=10) as client:
-        await client.post(
-            f"{settings.WAHA_URL.rstrip('/')}/api/sendText",
-            json={"chatId": f"{numero}@c.us", "text": texto, "session": "default"},
-            headers={"X-Api-Key": settings.WAHA_API_KEY},
-        )
+    prefix = _WA_ICON.get(type, "[NOTIFICACIÓN]")
+    texto = f"{prefix} *{title}*\n\n{body}"
+    chat_id = f"{numero}@c.us"
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.post(
+                f"{settings.WAHA_URL.rstrip('/')}/api/sendText",
+                json={"chatId": chat_id, "text": texto, "session": "default"},
+                headers={"X-Api-Key": settings.WAHA_API_KEY},
+            )
+        if resp.status_code >= 400:
+            logger.warning(
+                "[notify] WhatsApp sendText falló → %s %s (chat=%s, type=%s)",
+                resp.status_code, resp.text[:120], chat_id, type
+            )
+        else:
+            logger.info("[notify] WhatsApp enviado → %s (type=%s)", chat_id, type)
+    except Exception as exc:
+        logger.warning("[notify] WhatsApp excepción → %s (chat=%s, type=%s)", exc, chat_id, type)
 
 
 async def _send_email(email: str, name: str, title: str, body: str) -> None:

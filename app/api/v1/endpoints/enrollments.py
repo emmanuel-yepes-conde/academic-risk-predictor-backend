@@ -304,12 +304,17 @@ async def _send_whatsapp_risk_alert(
     student_name: str,
     course_name: str,
     risk_pct: float,
+    nivel: str,
     analisis: str,
     course_id: str,
 ) -> None:
-    """Envía el análisis natural de riesgo ALTO por WhatsApp al estudiante."""
+    """Envía el análisis natural de riesgo por WhatsApp al estudiante."""
     from app.core.config import settings
     import httpx
+
+    if not settings.WAHA_URL:
+        logger.warning("[WhatsApp] WAHA_URL no configurado — omitiendo alerta de riesgo")
+        return
 
     # Normalizar número: quitar +, espacios, guiones → agregar código Colombia si falta
     numero = phone.strip().replace(" ", "").replace("-", "").replace("+", "")
@@ -318,12 +323,13 @@ async def _send_whatsapp_risk_alert(
     chat_id = f"{numero}@c.us"
 
     nombre = student_name or "Estudiante"
+    nivel_texto = {"ALTO": "ALTO", "MEDIO": "MEDIO", "BAJO": "BAJO"}.get(nivel, nivel)
     texto = (
-        f"🔴 *Alerta de riesgo académico — {course_name}*\n\n"
-        f"Hola {nombre.split()[0]}, Risko detectó que tu riesgo de reprobación "
-        f"es *ALTO ({risk_pct:.0f}%)*.\n\n"
+        f"*[RIESGO {nivel_texto}] Alerta de riesgo academico — {course_name}*\n\n"
+        f"Hola {nombre.split()[0]}, Risko detecto que tu riesgo de reprobacion "
+        f"es *{nivel_texto} ({risk_pct:.0f}%)*.\n\n"
         f"{analisis}\n\n"
-        f"📲 Ingresa a la plataforma para ver tu simulador y opciones de mejora."
+        f"Ingresa a la plataforma para ver tu simulador y opciones de mejora."
     )
 
     url = f"{settings.WAHA_URL.rstrip('/')}/api/sendText"
@@ -336,9 +342,115 @@ async def _send_whatsapp_risk_alert(
         if resp.status_code >= 400:
             logger.warning(f"[WhatsApp] Error enviando alerta de riesgo: {resp.status_code} {resp.text[:120]}")
         else:
-            logger.info(f"[WhatsApp] ✅ Análisis de riesgo enviado → {chat_id}")
+            logger.info(f"[WhatsApp] Analisis de riesgo enviado → {chat_id}")
     except Exception as exc:
-        logger.error(f"[WhatsApp] Excepción al enviar alerta: {exc}")
+        logger.error(f"[WhatsApp] Excepcion al enviar alerta: {exc}")
+
+
+async def _notify_student_prediction_result(
+    enrollment_id: UUID,
+    nivel_riesgo: str,
+    probability: float,
+    analisis_ia: str,
+) -> None:
+    """
+    Background task: al calcular la predicción desde la plataforma,
+    notifica al estudiante si el riesgo es ALTO o MEDIO.
+    - ALTO:  push + WhatsApp + in-app
+    - MEDIO: push + in-app
+    - BAJO:  sin notificación
+    """
+    if nivel_riesgo == "BAJO":
+        return
+
+    try:
+        from app.core.config import settings
+        from app.infrastructure.database import engine
+        from sqlalchemy.ext.asyncio import AsyncSession as _AsyncSession
+        from app.infrastructure.models.enrollment import Enrollment as EnrollmentModel
+        from app.infrastructure.models.course import Course as CourseModel
+        from app.infrastructure.models.user import User as UserModel
+        from app.services.push_notification_service import (
+            send_push_to_user, build_risk_alert_message,
+        )
+        from app.services.notification_service import notify_by_user_id
+
+        async with _AsyncSession(engine) as bg_session:
+            enroll_q = await bg_session.execute(
+                select(EnrollmentModel).where(EnrollmentModel.id == enrollment_id)
+            )
+            enrollment = enroll_q.scalar_one_or_none()
+            if not enrollment:
+                return
+
+            course_q, user_q = await asyncio.gather(
+                bg_session.execute(select(CourseModel).where(CourseModel.id == enrollment.course_id)),
+                bg_session.execute(select(UserModel).where(UserModel.id == enrollment.student_id)),
+            )
+            course  = course_q.scalar_one_or_none()
+            student = user_q.scalar_one_or_none()
+
+            course_name      = course.name if course else "tu materia"
+            student_name     = student.full_name if student else ""
+            student_phone    = student.phone if student else None
+            wa_enabled       = getattr(student, "whatsapp_enabled", True) if student else False
+            risk_pct         = probability * 100
+            primera_linea    = analisis_ia.split("\n\n")[0]
+
+            msg = build_risk_alert_message(
+                student_name=student_name,
+                course_name=course_name,
+                risk_level=nivel_riesgo,
+                risk_pct=risk_pct,
+                course_id=str(enrollment.course_id),
+                analisis_primera_linea=primera_linea,
+            )
+
+            # Push notification
+            sent = await send_push_to_user(
+                user_id=str(enrollment.student_id),
+                title=msg["title"],
+                body=msg["body"],
+                url=msg["url"],
+                session=bg_session,
+            )
+            if sent > 0:
+                logger.info(
+                    f"[Prediccion] Push enviado → student {enrollment.student_id} "
+                    f"riesgo {nivel_riesgo} en {course_name}"
+                )
+
+            # In-app notification
+            try:
+                await notify_by_user_id(
+                    db=bg_session,
+                    user_id=enrollment.student_id,
+                    type="RISK_ALTO" if nivel_riesgo == "ALTO" else "RISK_MEDIO",
+                    title=msg["title"],
+                    body=msg["body"],
+                    data={
+                        "course_id": str(enrollment.course_id),
+                        "url":       msg["url"],
+                        "risk_pct":  round(risk_pct, 1),
+                    },
+                )
+            except Exception as _e:
+                logger.warning("[Prediccion] in-app notify falló: %s", _e)
+
+            # WhatsApp — solo para ALTO y si el estudiante lo tiene habilitado
+            if nivel_riesgo == "ALTO" and student_phone and wa_enabled:
+                await _send_whatsapp_risk_alert(
+                    phone=student_phone,
+                    student_name=student_name,
+                    course_name=course_name,
+                    risk_pct=risk_pct,
+                    nivel=nivel_riesgo,
+                    analisis=analisis_ia,
+                    course_id=str(enrollment.course_id),
+                )
+
+    except Exception as exc:
+        logger.error(f"[Prediccion] Error en notificacion de resultado: {exc}")
 
 
 async def _push_risk_alert_if_needed(
@@ -463,6 +575,7 @@ async def _push_risk_alert_if_needed(
                     student_name=student_name,
                     course_name=course_name,
                     risk_pct=result["probability"] * 100,
+                    nivel=result["risk_level"],
                     analisis=analisis_completo,
                     course_id=str(enrollment.course_id),
                 )
@@ -516,6 +629,8 @@ async def set_enrollment_grades(
 )
 async def calculate_enrollment_risk(
     enrollment_id: UUID,
+    background_tasks: BackgroundTasks,
+    notify: bool = Query(False, description="Enviar notificación al estudiante si riesgo es ALTO o MEDIO"),
     current_user: CurrentUser = Depends(get_current_user),
     grade_service: GradeService = Depends(_get_grade_service),
     ml: AcademicRiskService = Depends(_get_ml_service),
@@ -530,25 +645,31 @@ async def calculate_enrollment_risk(
             detail="No hay notas registradas para esta inscripción",
         )
 
-    # 2. Extraer features desde columnas calculadas de la inscripción
-    if (
-        grades_data.first_cohort_grade is None
-        or grades_data.second_cohort_grade is None
-        or grades_data.third_cohort_grade is None
-        or grades_data.final_grade is None
-    ):
+    # 2. Extraer features — predicción parcial con imputación si faltan cortes
+    raw_c1    = float(grades_data.first_cohort_grade)  if grades_data.first_cohort_grade  is not None else None
+    raw_c2    = float(grades_data.second_cohort_grade) if grades_data.second_cohort_grade is not None else None
+    raw_c3    = float(grades_data.third_cohort_grade)  if grades_data.third_cohort_grade  is not None else None
+    raw_total = float(grades_data.final_grade)         if grades_data.final_grade         is not None else None
+
+    available_cohort_grades = [g for g in [raw_c1, raw_c2, raw_c3] if g is not None]
+    if not available_cohort_grades:
         raise HTTPException(
             status_code=422,
             detail=(
-                "Faltan notas por cohorte para calcular riesgo. "
-                "Verifica que estén registrados corte 1, corte 2, corte final y total."
+                "Aún no hay calificaciones registradas para este curso. "
+                "El docente debe ingresar al menos la nota del primer corte para activar el predictor."
             ),
         )
 
-    nota_corte_1 = float(grades_data.first_cohort_grade)
-    nota_corte_2 = float(grades_data.second_cohort_grade)
-    nota_corte_final = float(grades_data.third_cohort_grade)
-    nota_total = float(grades_data.final_grade)
+    # Impute missing cohort grades with the average of the available ones ("at current pace")
+    avg_available = round(sum(available_cohort_grades) / len(available_cohort_grades), 2)
+    nota_corte_1   = raw_c1    if raw_c1    is not None else avg_available
+    nota_corte_2   = raw_c2    if raw_c2    is not None else avg_available
+    nota_corte_final = raw_c3  if raw_c3    is not None else avg_available
+    nota_total     = raw_total if raw_total is not None else avg_available
+
+    is_partial = len(available_cohort_grades) < 3 or raw_total is None
+    cortes_disponibles = len(available_cohort_grades)
 
     feature_vector = [
         nota_corte_1,
@@ -577,11 +698,13 @@ async def calculate_enrollment_risk(
     detalles_matematicos = ml.calcular_detalles_matematicos(features_scaled, probabilidad_riesgo)
     promedio_aprobados = ml.get_promedio_aprobados()
 
-    return PredictionOutput(
+    output = PredictionOutput(
         probabilidad_riesgo=probabilidad_riesgo,
         porcentaje_riesgo=probabilidad_riesgo * 100,
         nivel_riesgo=nivel_riesgo,
         analisis_ia=analisis_ia,
+        is_partial=is_partial,
+        cortes_disponibles=cortes_disponibles,
         datos_radar={
             "labels": ["Corte 1", "Corte 2", "Corte final", "Total"],
             "estudiante": [
@@ -599,6 +722,18 @@ async def calculate_enrollment_risk(
         },
         detalles_matematicos=detalles_matematicos,
     )
+
+    # Enviar notificación al estudiante (push + WhatsApp si ALTO)
+    if notify and nivel_riesgo in ("ALTO", "MEDIO"):
+        background_tasks.add_task(
+            _notify_student_prediction_result,
+            enrollment_id,
+            nivel_riesgo,
+            probabilidad_riesgo,
+            analisis_ia,
+        )
+
+    return output
 
 
 @router.post(

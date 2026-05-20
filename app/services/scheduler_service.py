@@ -54,10 +54,20 @@ async def _run_class_crisis() -> None:
         logger.error("[scheduler] class-crisis falló: %s", exc, exc_info=True)
 
 
+async def _run_chatbot_timeout_check() -> None:
+    """Revisa sesiones de chatbot inactivas y envía mensajes de seguimiento/despedida."""
+    try:
+        from app.application.services.waha_chatbot_service import check_chatbot_timeouts
+        await check_chatbot_timeouts()
+    except Exception as exc:
+        logger.warning("[scheduler] chatbot-timeout falló: %s", exc)
+
+
 # Mapeo job_id → coroutine function
 _JOB_FN = {
-    "risk-alerts":  _run_risk_alerts,
-    "class-crisis": _run_class_crisis,
+    "risk-alerts":         _run_risk_alerts,
+    "class-crisis":        _run_class_crisis,
+    "chatbot-timeout":     _run_chatbot_timeout_check,
 }
 
 
@@ -95,6 +105,15 @@ async def start_scheduler(engine) -> AsyncIOScheduler:
         if not cron_expr or job_id not in _JOB_FN:
             continue
         _schedule_job(scheduler, job_id, cron_expr)
+
+    # Job interno: timeout del chatbot de WhatsApp (cada minuto, no en DB)
+    scheduler.add_job(
+        _run_chatbot_timeout_check,
+        trigger=CronTrigger(minute="*", timezone="America/Bogota"),
+        id="chatbot-timeout",
+        replace_existing=True,
+    )
+    logger.info("[scheduler] job 'chatbot-timeout' programado → cada minuto")
 
     scheduler.start()
     logger.info("[scheduler] APScheduler iniciado con %d jobs", len(scheduler.get_jobs()))

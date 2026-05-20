@@ -76,10 +76,10 @@ async def _send_whatsapp_attendance(
         fecha_hora = _fmt_colombia(recorded_at)
 
         texto = (
-            f"✅ *Asistencia registrada — {course_name}*\n\n"
+            f"*Asistencia registrada — {course_name}*\n\n"
             f"Hola {student_name.split()[0]}, tu asistencia a {clase_info} "
             f"ha sido registrada exitosamente.\n\n"
-            f"📅 *Fecha y hora:* {fecha_hora}\n\n"
+            f"*Fecha y hora:* {fecha_hora}\n\n"
             f"_Sistema de seguimiento académico USB_"
         )
 
@@ -331,15 +331,16 @@ async def register_attendance(
     )
     course_name = course_q.scalar_one_or_none() or "tu materia"
 
-    # 9. Notificación in-app (campanita) — síncrona para que aparezca de inmediato
+    # 9. Notificaciones in-app (campanita) — síncronas para que aparezcan de inmediato
     try:
         from app.services.notification_service import notify
+        # 9a. Notificar al propio estudiante
         await notify(
             db=db,
             user=current_user,
             type="ATTENDANCE",
-            title="✅ Asistencia registrada",
-            body=f"Tu asistencia a {course_name} fue registrada correctamente · {hora_col}",
+            title="Asistencia registrada",
+            body=f"Tu asistencia a {course_name} fue registrada correctamente — {hora_col}",
             data={
                 "session_id": str(session_id),
                 "course_id":  str(session.course_id),
@@ -348,7 +349,30 @@ async def register_attendance(
             send_email=False,
         )
     except Exception as _notif_err:
-        logger.warning("[Attendance] in-app notify falló: %s", _notif_err)
+        logger.warning("[Attendance] in-app notify estudiante falló: %s", _notif_err)
+
+    # 9b. Notificar al profesor que un estudiante se acaba de unir
+    try:
+        from app.services.notification_service import notify_by_user_id
+        # Obtener el profesor de la sesión
+        from app.infrastructure.models.course import Course as _Course
+        course_obj_q = await db.execute(select(_Course).where(_Course.id == session.course_id))
+        course_obj = course_obj_q.scalar_one_or_none()
+        if course_obj and course_obj.professor_id:
+            await notify_by_user_id(
+                db=db,
+                user_id=course_obj.professor_id,
+                type="ATTENDANCE",
+                title="Asistencia registrada",
+                body=f"{current_user.full_name} registró su asistencia en {course_name} — {hora_col}",
+                data={
+                    "session_id": str(session_id),
+                    "course_id":  str(session.course_id),
+                    "student_id": str(current_user.id),
+                },
+            )
+    except Exception as _prof_notif_err:
+        logger.warning("[Attendance] in-app notify profesor falló: %s", _prof_notif_err)
 
     # 10. WhatsApp de confirmación al estudiante (en background)
     if current_user.phone:
@@ -360,10 +384,25 @@ async def register_attendance(
             session_label=session.label,
             recorded_at=attendance.recorded_at,
         )
+    else:
+        # Sin número de teléfono → aviso in-app para que lo registre
+        try:
+            from app.services.notification_service import notify
+            await notify(
+                db=db,
+                user=current_user,
+                type="SYSTEM",
+                title="Sin número de WhatsApp",
+                body="No pudimos enviarte la confirmación por WhatsApp. Registra tu número en tu perfil para recibir alertas.",
+                send_whatsapp=False,
+                send_email=False,
+            )
+        except Exception:
+            pass
 
     return {
         "ok": True,
-        "message": f"✅ Asistencia registrada correctamente · {hora_col}",
+        "message": f"Asistencia registrada correctamente — {hora_col}",
         "session_label": session.label or "Sesión de clase",
         "recorded_at": attendance.recorded_at.isoformat(),
     }
@@ -422,6 +461,54 @@ async def close_session(
     await db.commit()
 
     return {"ok": True, "message": "Sesión cerrada"}
+
+
+# ─── Notificación de asistencia manual ────────────────────────────────────────
+
+class ManualAttendanceNotifyBody(BaseModel):
+    student_id: UUID
+    course_name: str
+    cohort: str
+
+
+@router.post(
+    "/notify-manual",
+    summary="Notificar al estudiante asistencia registrada manualmente (profesor)",
+)
+async def notify_manual_attendance(
+    body: ManualAttendanceNotifyBody,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+) -> dict:
+    """
+    El profesor registró la asistencia de un estudiante manualmente (no por QR).
+    Envía al estudiante una notificación in-app y WhatsApp confirmando el registro.
+    """
+    if current_user.role not in (RoleEnum.PROFESSOR, RoleEnum.ADMIN):
+        raise HTTPException(status_code=403, detail="Solo profesores pueden usar esta función")
+
+    student_q = await db.execute(select(User).where(User.id == body.student_id))
+    student = student_q.scalar_one_or_none()
+    if not student:
+        return {"ok": False, "message": "Estudiante no encontrado"}
+
+    hora_col = _fmt_colombia(datetime.now(timezone.utc))
+
+    try:
+        from app.services.notification_service import notify
+        await notify(
+            db=db,
+            user=student,
+            type="ATTENDANCE",
+            title="Asistencia registrada",
+            body=f"Tu asistencia a *{body.course_name}* fue registrada por tu docente · {hora_col}",
+            data={"course_name": body.course_name, "cohort": body.cohort},
+            send_whatsapp=True,
+        )
+    except Exception as exc:
+        logger.warning("[Manual Attendance Notify] falló para %s: %s", body.student_id, exc)
+
+    return {"ok": True, "message": "Notificación enviada"}
 
 
 # ─── Historial de asistencia ──────────────────────────────────────────────────
