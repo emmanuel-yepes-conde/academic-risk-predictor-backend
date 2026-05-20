@@ -34,6 +34,8 @@ logger = logging.getLogger(__name__)
 # Prefijos de texto por tipo para el mensaje WhatsApp (sin emojis)
 _WA_ICON = {
     "RISK_ALTO":      "[RIESGO ALTO]",
+    "RISK_MEDIO":     "[RIESGO MEDIO]",
+    "RISK_BAJO":      "[RIESGO BAJO]",
     "RISK_RECOVERED": "[RIESGO BAJO]",
     "ATTENDANCE":     "[ASISTENCIA]",
     "GRADE_UPDATE":   "[NOTAS]",

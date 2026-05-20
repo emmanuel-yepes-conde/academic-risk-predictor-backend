@@ -299,6 +299,31 @@ async def get_enrollment_grades(
     return await service.get_grades(enrollment_id, current_user)
 
 
+async def _send_wa_text(phone: str, text: str) -> None:
+    """Envía un mensaje de texto plano por WhatsApp (helper interno)."""
+    from app.core.config import settings
+    import httpx
+    if not settings.WAHA_URL:
+        logger.warning("[WhatsApp] WAHA_URL no configurado — omitiendo mensaje")
+        return
+    numero = phone.strip().replace(" ", "").replace("-", "").replace("+", "")
+    if not numero.startswith("57") and len(numero) == 10:
+        numero = f"57{numero}"
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(
+                f"{settings.WAHA_URL.rstrip('/')}/api/sendText",
+                json={"session": "default", "chatId": f"{numero}@c.us", "text": text},
+                headers={"X-Api-Key": settings.WAHA_API_KEY},
+            )
+        if resp.status_code >= 400:
+            logger.warning("[WhatsApp] sendText falló → %s %s", resp.status_code, resp.text[:120])
+        else:
+            logger.info("[WhatsApp] Mensaje enviado → %s@c.us", numero)
+    except Exception as exc:
+        logger.error("[WhatsApp] Excepcion enviando mensaje: %s", exc)
+
+
 async def _send_whatsapp_risk_alert(
     phone: str,
     student_name: str,
@@ -354,15 +379,12 @@ async def _notify_student_prediction_result(
     analisis_ia: str,
 ) -> None:
     """
-    Background task: al calcular la predicción desde la plataforma,
-    notifica al estudiante si el riesgo es ALTO o MEDIO.
-    - ALTO:  push + WhatsApp + in-app
-    - MEDIO: push + in-app
-    - BAJO:  sin notificación
+    Background task: al calcular la predicción manualmente desde la plataforma,
+    notifica al estudiante por push + WhatsApp + in-app para TODOS los niveles de riesgo.
+    - ALTO:  mensaje de alerta urgente
+    - MEDIO: mensaje de precaución
+    - BAJO:  mensaje de confirmación positiva
     """
-    if nivel_riesgo == "BAJO":
-        return
-
     try:
         from app.core.config import settings
         from app.infrastructure.database import engine
@@ -370,9 +392,7 @@ async def _notify_student_prediction_result(
         from app.infrastructure.models.enrollment import Enrollment as EnrollmentModel
         from app.infrastructure.models.course import Course as CourseModel
         from app.infrastructure.models.user import User as UserModel
-        from app.services.push_notification_service import (
-            send_push_to_user, build_risk_alert_message,
-        )
+        from app.services.push_notification_service import send_push_to_user
         from app.services.notification_service import notify_by_user_id
 
         async with _AsyncSession(engine) as bg_session:
@@ -381,6 +401,7 @@ async def _notify_student_prediction_result(
             )
             enrollment = enroll_q.scalar_one_or_none()
             if not enrollment:
+                logger.warning("[Prediccion] enrollment no encontrado: %s", enrollment_id)
                 return
 
             course_q, user_q = await asyncio.gather(
@@ -390,67 +411,94 @@ async def _notify_student_prediction_result(
             course  = course_q.scalar_one_or_none()
             student = user_q.scalar_one_or_none()
 
-            course_name      = course.name if course else "tu materia"
-            student_name     = student.full_name if student else ""
-            student_phone    = student.phone if student else None
-            wa_enabled       = getattr(student, "whatsapp_enabled", True) if student else False
-            risk_pct         = probability * 100
-            primera_linea    = analisis_ia.split("\n\n")[0]
+            course_name   = course.name if course else "tu materia"
+            student_name  = student.full_name if student else ""
+            student_phone = student.phone if student else None
+            wa_enabled    = getattr(student, "whatsapp_enabled", True) if student else False
+            risk_pct      = probability * 100
+            primera_linea = analisis_ia.split("\n\n")[0]
 
-            msg = build_risk_alert_message(
-                student_name=student_name,
-                course_name=course_name,
-                risk_level=nivel_riesgo,
-                risk_pct=risk_pct,
-                course_id=str(enrollment.course_id),
-                analisis_primera_linea=primera_linea,
-            )
+            # Título y cuerpo adaptados al nivel
+            if nivel_riesgo == "ALTO":
+                notif_type  = "RISK_ALTO"
+                title       = f"[RIESGO ALTO] {course_name}"
+                body        = primera_linea or f"Tu riesgo de reprobar es ALTO ({risk_pct:.0f}%). Busca asesoria cuanto antes."
+            elif nivel_riesgo == "MEDIO":
+                notif_type  = "RISK_MEDIO"
+                title       = f"[RIESGO MEDIO] {course_name}"
+                body        = primera_linea or f"Tu riesgo de reprobar es MEDIO ({risk_pct:.0f}%). Refuerza los temas pendientes."
+            else:  # BAJO
+                notif_type  = "RISK_BAJO"
+                title       = f"[RIESGO BAJO] {course_name}"
+                body        = f"Riesgo de reprobar: BAJO ({risk_pct:.0f}%). Vas por buen camino, sigue asi."
+
+            url = f"/materia/{enrollment.course_id}"
 
             # Push notification
-            sent = await send_push_to_user(
-                user_id=str(enrollment.student_id),
-                title=msg["title"],
-                body=msg["body"],
-                url=msg["url"],
-                session=bg_session,
-            )
-            if sent > 0:
-                logger.info(
-                    f"[Prediccion] Push enviado → student {enrollment.student_id} "
-                    f"riesgo {nivel_riesgo} en {course_name}"
+            try:
+                sent = await send_push_to_user(
+                    user_id=str(enrollment.student_id),
+                    title=title,
+                    body=body,
+                    url=url,
+                    session=bg_session,
                 )
+                logger.info(
+                    "[Prediccion] Push %s → student %s riesgo %s en %s (sent=%d)",
+                    "enviado" if sent > 0 else "sin dispositivos",
+                    enrollment.student_id, nivel_riesgo, course_name, sent,
+                )
+            except Exception as _push_err:
+                logger.warning("[Prediccion] push falló: %s", _push_err)
 
-            # In-app notification
+            # In-app (campanita)
             try:
                 await notify_by_user_id(
                     db=bg_session,
                     user_id=enrollment.student_id,
-                    type="RISK_ALTO" if nivel_riesgo == "ALTO" else "RISK_MEDIO",
-                    title=msg["title"],
-                    body=msg["body"],
-                    data={
-                        "course_id": str(enrollment.course_id),
-                        "url":       msg["url"],
-                        "risk_pct":  round(risk_pct, 1),
-                    },
+                    type=notif_type,
+                    title=title,
+                    body=body,
+                    data={"course_id": str(enrollment.course_id), "url": url, "risk_pct": round(risk_pct, 1)},
                 )
-            except Exception as _e:
-                logger.warning("[Prediccion] in-app notify falló: %s", _e)
+                logger.info("[Prediccion] In-app notif creada → student %s", enrollment.student_id)
+            except Exception as _notif_err:
+                logger.warning("[Prediccion] in-app notify falló: %s", _notif_err)
 
-            # WhatsApp — solo para ALTO y si el estudiante lo tiene habilitado
-            if nivel_riesgo == "ALTO" and student_phone and wa_enabled:
-                await _send_whatsapp_risk_alert(
-                    phone=student_phone,
-                    student_name=student_name,
-                    course_name=course_name,
-                    risk_pct=risk_pct,
-                    nivel=nivel_riesgo,
-                    analisis=analisis_ia,
-                    course_id=str(enrollment.course_id),
+            # WhatsApp — para todos los niveles si está habilitado y tiene teléfono
+            if student_phone and wa_enabled:
+                if nivel_riesgo == "BAJO":
+                    wa_text = (
+                        f"*[RIESGO BAJO] {course_name}*\n\n"
+                        f"Hola {student_name.split()[0] if student_name else 'estudiante'}, "
+                        f"tu prediccion de riesgo academico es *BAJO ({risk_pct:.0f}%)*.\n\n"
+                        f"Vas por buen camino. Sigue con ese ritmo de estudio."
+                    )
+                else:
+                    wa_text = None  # usa _send_whatsapp_risk_alert con analisis completo
+
+                if wa_text:
+                    # Mensaje directo para BAJO
+                    await _send_wa_text(student_phone, wa_text)
+                else:
+                    # Analisis completo para MEDIO/ALTO
+                    await _send_whatsapp_risk_alert(
+                        phone=student_phone,
+                        student_name=student_name,
+                        course_name=course_name,
+                        risk_pct=risk_pct,
+                        nivel=nivel_riesgo,
+                        analisis=analisis_ia,
+                        course_id=str(enrollment.course_id),
+                    )
+            else:
+                logger.info(
+                    "[Prediccion] WhatsApp omitido → phone=%s wa_enabled=%s",
+                    bool(student_phone), wa_enabled,
                 )
 
     except Exception as exc:
-        logger.error(f"[Prediccion] Error en notificacion de resultado: {exc}")
+        logger.error("[Prediccion] Error en notificacion de resultado: %s", exc, exc_info=True)
 
 
 async def _push_risk_alert_if_needed(

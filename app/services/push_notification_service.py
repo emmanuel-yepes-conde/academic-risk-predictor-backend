@@ -156,17 +156,16 @@ def build_risk_alert_message(
     Construye el payload de notificación push para una alerta de riesgo ALTO.
     El body incluye la primera línea del análisis natural si está disponible.
     """
-    emoji = "🔴" if risk_level == "ALTO" else "🟡"
-    # Usar el análisis natural como body si está disponible; sino, mensaje genérico
+    nivel_label = {"ALTO": "[RIESGO ALTO]", "MEDIO": "[RIESGO MEDIO]", "BAJO": "[RIESGO BAJO]"}.get(risk_level, f"[{risk_level}]")
     if analisis_primera_linea:
         body = analisis_primera_linea
     else:
         body = (
-            f"Tu nivel de riesgo subió a {risk_level} ({risk_pct:.0f}%). "
-            "Toca para ver el análisis completo."
+            f"Tu nivel de riesgo es {risk_level} ({risk_pct:.0f}%). "
+            "Ingresa a la plataforma para ver el analisis completo."
         )
     return {
-        "title": f"{emoji} Riesgo en {course_name}",
+        "title": f"{nivel_label} {course_name}",
         "body": body,
         "url": f"/materia/{course_id}",
     }
