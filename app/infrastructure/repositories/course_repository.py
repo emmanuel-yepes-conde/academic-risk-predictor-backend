@@ -14,6 +14,7 @@ from app.domain.enums import CourseStatusEnum, OperationEnum
 from app.domain.interfaces.course_repository import ICourseRepository
 from app.infrastructure.models.course import Course
 from app.infrastructure.models.enrollment import Enrollment
+from app.infrastructure.models.student_profile import StudentProfile
 from app.infrastructure.models.subject import Subject
 from app.infrastructure.models.user import User
 from app.infrastructure.repositories.audit_log_repository import AuditLogRepository
@@ -190,13 +191,26 @@ class CourseRepository(ICourseRepository):
         return await self.get_by_id(course_id)
 
     async def list_enrolled_students(self, course_id: UUID) -> list[User]:
+        from sqlalchemy.orm import selectinload  # lazy import para evitar ciclos
         stmt = (
             select(User)
             .join(Enrollment, Enrollment.student_id == User.id)
             .where(Enrollment.course_id == course_id)
         )
         result = await self._session.execute(stmt)
-        return list(result.scalars().all())
+        users = list(result.scalars().all())
+
+        # Enriquecer con student_institutional_id desde StudentProfile
+        if users:
+            user_ids = [u.id for u in users]
+            profiles_stmt = select(StudentProfile).where(StudentProfile.user_id.in_(user_ids))
+            profiles_result = await self._session.execute(profiles_stmt)
+            profiles_map = {p.user_id: p.student_institutional_id for p in profiles_result.scalars().all()}
+            for user in users:
+                # Asignar como atributo dinámico — UserRead lo leerá via from_attributes
+                user.__dict__['student_institutional_id'] = profiles_map.get(user.id)
+
+        return users
 
     # --- Compatibilidad con código legacy ---
 
