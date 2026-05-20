@@ -347,14 +347,16 @@ async def _send_whatsapp_risk_alert(
         numero = f"57{numero}"
     chat_id = f"{numero}@c.us"
 
-    nombre = student_name or "Estudiante"
+    nombre      = student_name or "Estudiante"
+    primer      = nombre.split()[0]
+    nivel_emoji = {"ALTO": "🔴", "MEDIO": "🟡", "BAJO": "🟢"}.get(nivel, "📊")
     nivel_texto = {"ALTO": "ALTO", "MEDIO": "MEDIO", "BAJO": "BAJO"}.get(nivel, nivel)
     texto = (
-        f"*[RIESGO {nivel_texto}] Alerta de riesgo academico — {course_name}*\n\n"
-        f"Hola {nombre.split()[0]}, Risko detecto que tu riesgo de reprobacion "
-        f"es *{nivel_texto} ({risk_pct:.0f}%)*.\n\n"
+        f"{nivel_emoji} *Predicción de riesgo académico*\n\n"
+        f"Hola {primer}! Risko analizó tu rendimiento en *{course_name}*.\n\n"
+        f"📊 *Nivel de riesgo:* {nivel_texto} ({risk_pct:.0f}%)\n\n"
         f"{analisis}\n\n"
-        f"Ingresa a la plataforma para ver tu simulador y opciones de mejora."
+        f"Ingresa a la plataforma para ver tu simulador y opciones de mejora 👉 Academic Risk"
     )
 
     url = f"{settings.WAHA_URL.rstrip('/')}/api/sendText"
@@ -467,12 +469,13 @@ async def _notify_student_prediction_result(
 
             # WhatsApp — para todos los niveles si está habilitado y tiene teléfono
             if student_phone and wa_enabled:
+                primer_nombre = student_name.split()[0] if student_name else "estudiante"
                 if nivel_riesgo == "BAJO":
                     wa_text = (
-                        f"*[RIESGO BAJO] {course_name}*\n\n"
-                        f"Hola {student_name.split()[0] if student_name else 'estudiante'}, "
-                        f"tu prediccion de riesgo academico es *BAJO ({risk_pct:.0f}%)*.\n\n"
-                        f"Vas por buen camino. Sigue con ese ritmo de estudio."
+                        f"🟢 *Predicción de riesgo académico*\n\n"
+                        f"Hola {primer_nombre}! Risko analizó tu rendimiento en *{course_name}*.\n\n"
+                        f"📊 *Nivel de riesgo:* BAJO ({risk_pct:.0f}%)\n\n"
+                        f"Vas por muy buen camino. Sigue con ese ritmo de estudio y esa dedicación! 💪"
                     )
                 else:
                     wa_text = None  # usa _send_whatsapp_risk_alert con analisis completo
