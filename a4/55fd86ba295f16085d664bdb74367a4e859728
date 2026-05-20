@@ -1,0 +1,39 @@
+app/api/v1/endpoints/enrollments.py
+  s_b03b3a99345ebc::t_4cdc29d326d932 441-458
+app/api/v1/endpoints/attendance.py
+  s_b03b3a99345ebc::t_f1e4a73f80dcdd 325-333,335-348,350-352,354
+  s_b03b3a99345ebc::t_81243f0b74fef5 319-324,334,353
+app/services/push_notification_service.py
+  s_b03b3a99345ebc::t_320ec8e635f6dd 90-93
+app/services/acs_email_service.py
+  s_b03b3a99345ebc::t_3c4e149b118572 647,650-657,662-673
+  s_b03b3a99345ebc::t_a2b0a205182514 713-719,721-724,729-730,733,737-742,745
+app/services/notification_service.py
+  s_b03b3a99345ebc::t_5decd28ab40aef 129-133,135-162,164
+app/api/v1/endpoints/jobs.py
+  s_b03b3a99345ebc::t_d165874d3e9cf4 121-130
+  s_b03b3a99345ebc::t_1e5f9c794cdf14 55-59
+  s_b03b3a99345ebc::t_180e4aa4174496 189-305
+app/services/scheduler_service.py
+  s_b03b3a99345ebc::t_7aec29ae1354ca 1-163
+app/main.py
+  s_b03b3a99345ebc::t_0decccc3ce7085 70-81,92-96
+requirements.txt
+  s_b03b3a99345ebc::t_4d8943b0882245 67-69
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.11",
+  "base_commit_sha": "a455fd86ba295f16085d664bdb74367a4e859728",
+  "prompts": {},
+  "sessions": {
+    "s_b03b3a99345ebc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "379dbf03-6b10-4ee4-83b4-56a99a81b41a",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "daforonda_meli <davidlujan.foronda@mercadolibre.com.co>"
+    }
+  }
+}
