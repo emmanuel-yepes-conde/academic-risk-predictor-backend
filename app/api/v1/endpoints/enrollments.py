@@ -774,8 +774,8 @@ async def calculate_enrollment_risk(
         detalles_matematicos=detalles_matematicos,
     )
 
-    # Enviar notificación al estudiante (push + WhatsApp si ALTO)
-    if notify and nivel_riesgo in ("ALTO", "MEDIO"):
+    # Enviar notificación al estudiante para todos los niveles de riesgo
+    if notify:
         background_tasks.add_task(
             _notify_student_prediction_result,
             enrollment_id,
