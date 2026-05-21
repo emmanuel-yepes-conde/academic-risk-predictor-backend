@@ -500,6 +500,85 @@ async def _notify_student_prediction_result(
                     bool(student_phone), wa_enabled,
                 )
 
+            # Email — si el estudiante lo tiene habilitado
+            email_enabled = getattr(student, "email_enabled", True) if student else False
+            student_email = (
+                getattr(student, "institutional_email", None) or getattr(student, "email", None)
+            ) if student else None
+            if email_enabled and student_email:
+                try:
+                    from app.services.notification_service import _send_email as _send_notif_email
+                    nivel_emoji = {"ALTO": "🔴", "MEDIO": "🟡", "BAJO": "🟢"}.get(nivel_riesgo, "📊")
+                    nivel_color = {"ALTO": "#dc2626", "MEDIO": "#d97706", "BAJO": "#16a34a"}.get(nivel_riesgo, "#1E3932")
+                    nivel_bg    = {"ALTO": "#fee2e2", "MEDIO": "#fef3c7", "BAJO": "#dcfce7"}.get(nivel_riesgo, "#f0fdf4")
+                    email_subject = f"{nivel_emoji} Predicción de riesgo académico — {course_name}"
+                    primer_nombre = student_name.split()[0] if student_name else "estudiante"
+                    email_body = (
+                        f"Hola {primer_nombre},\n\n"
+                        f"Risko analizó tu rendimiento académico en {course_name} "
+                        f"y determinó un nivel de riesgo {nivel_riesgo} ({risk_pct:.0f}%).\n\n"
+                        f"{analisis_ia}\n\n"
+                        f"Ingresa a Academic Risk para ver tu simulador y explorar estrategias de mejora."
+                    )
+                    # HTML enriquecido con colores del nivel de riesgo
+                    analisis_html = analisis_ia.replace("\n", "<br>")
+                    html_content = f"""<!DOCTYPE html><html><body
+                      style="margin:0;padding:24px;background:#f8fafc;font-family:Arial,Helvetica,sans-serif;">
+                      <div style="max-width:580px;margin:0 auto;background:#fff;border-radius:12px;
+                                  padding:32px;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
+                        <div style="background:#1E3932;border-radius:8px;padding:14px 20px;margin-bottom:24px;">
+                          <span style="color:#fff;font-size:16px;font-weight:700;">
+                            Academic <span style="color:#d4e9e2;">Risk</span>
+                          </span>
+                        </div>
+                        <h2 style="color:#1E3932;font-size:18px;margin:0 0 4px 0;">
+                          Predicción de riesgo académico
+                        </h2>
+                        <p style="color:#4a5568;font-size:14px;margin:0 0 20px 0;">
+                          Hola <strong>{primer_nombre}</strong>, aquí está tu análisis para <strong>{course_name}</strong>.
+                        </p>
+                        <div style="display:inline-flex;align-items:center;gap:8px;
+                                    background:{nivel_bg};border:1.5px solid {nivel_color};
+                                    border-radius:8px;padding:10px 16px;margin-bottom:20px;">
+                          <span style="font-size:20px;">{nivel_emoji}</span>
+                          <div>
+                            <p style="margin:0;font-size:13px;font-weight:700;color:{nivel_color};">
+                              Riesgo {nivel_riesgo}
+                            </p>
+                            <p style="margin:0;font-size:12px;color:{nivel_color};opacity:0.85;">
+                              Probabilidad de reprobar: {risk_pct:.0f}%
+                            </p>
+                          </div>
+                        </div>
+                        <p style="color:#4a5568;font-size:14px;line-height:1.7;margin:0 0 20px 0;">
+                          {analisis_html}
+                        </p>
+                        <a href="#" style="display:inline-block;background:#1E3932;color:#fff;
+                                           font-size:14px;font-weight:700;padding:12px 24px;
+                                           border-radius:8px;text-decoration:none;margin-bottom:24px;">
+                          Ver mi progreso en Academic Risk →
+                        </a>
+                        <hr style="border:none;border-top:1px solid #e2e8f0;margin:0"/>
+                        <p style="color:#9ca3af;font-size:11px;margin:16px 0 0 0;">
+                          Puedes desactivar estas notificaciones desde tu perfil en la plataforma.
+                        </p>
+                      </div>
+                    </body></html>"""
+                    await _send_notif_email(
+                        email=student_email,
+                        name=student_name,
+                        title=email_subject,
+                        body=email_body,
+                    )
+                    logger.info("[Prediccion] Email enviado → %s (nivel=%s)", student_email, nivel_riesgo)
+                except Exception as _email_err:
+                    logger.warning("[Prediccion] Email falló → %s: %s", student_email, _email_err)
+            else:
+                logger.info(
+                    "[Prediccion] Email omitido → email=%s email_enabled=%s",
+                    bool(student_email), email_enabled,
+                )
+
     except Exception as exc:
         logger.error("[Prediccion] Error en notificacion de resultado: %s", exc, exc_info=True)
 
