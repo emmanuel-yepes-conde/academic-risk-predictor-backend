@@ -336,8 +336,9 @@ deploy() {
             --set-env-vars \
                 "AZURE_BACKEND_DNS=${fqdn}" \
                 "PUBLIC_BACKEND_URL=https://${fqdn}" \
-                "CORS_ORIGINS=http://localhost:3000,http://localhost:4321,http://localhost:5173,https://academic-risk-predictor-frontend.vercel.app" \
+                "CORS_ORIGINS=https://academic-risk-predictor-frontend.vercel.app" \
                 "CORS_ORIGIN_REGEX=https://.*\.vercel\.app" \
+                "FRONTEND_URL=https://academic-risk-predictor-frontend.vercel.app" \
                 "WAHA_URL=${waha_url}" \
                 "WAHA_API_KEY=${waha_api_key}" \
                 "VAPID_PRIVATE_KEY_B64=${vapid_private_key_b64}" \
@@ -366,8 +367,9 @@ deploy() {
                 "JWT_SECRET_KEY=secretref:jwt-secret-key" \
                 "HOST=0.0.0.0" \
                 "PORT=8000" \
-                "CORS_ORIGINS=http://localhost:3000,http://localhost:4321,http://localhost:5173,https://academic-risk-predictor-frontend.vercel.app" \
+                "CORS_ORIGINS=https://academic-risk-predictor-frontend.vercel.app" \
                 "CORS_ORIGIN_REGEX=https://.*\.vercel\.app" \
+                "FRONTEND_URL=https://academic-risk-predictor-frontend.vercel.app" \
                 "LOG_LEVEL=info" \
                 "MODEL_PATH=ml_models/modelo_logistico.joblib" \
                 "SCALER_PATH=ml_models/scaler.joblib" \

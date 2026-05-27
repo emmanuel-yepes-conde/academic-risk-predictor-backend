@@ -180,7 +180,7 @@ class Settings(BaseSettings):
         description="Correo del área de consejería/permanencia que recibe notificaciones",
     )
     FRONTEND_URL: str = Field(
-        default="http://localhost:3000",
+        default="https://academic-risk-predictor-frontend.vercel.app",
         description="URL base del frontend — se usa en los botones de los correos",
     )
 
