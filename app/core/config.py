@@ -164,6 +164,10 @@ class Settings(BaseSettings):
     FROM_EMAIL: str = Field(default="", description="Dirección de correo remitente")
     FROM_NAME: str = Field(default="Academic Risk Notifications", description="Nombre del remitente")
 
+    # Forzar SMTP (bypass ACS) — útil para pruebas sin gastar tokens de Azure
+    # Poner EMAIL_FORCE_SMTP=true en .env para usar SMTP en todos los correos
+    EMAIL_FORCE_SMTP: bool = Field(default=False, description="Si True, usa SMTP para todos los correos (ignora ACS)")
+
     # Azure Communication Services (ACS) — notificaciones de remisiones
     # Si no se configuran, el servicio ACS queda desactivado sin afectar el resto.
     ACS_CONNECTION_STRING: str = Field(default="", description="Connection string de ACS")

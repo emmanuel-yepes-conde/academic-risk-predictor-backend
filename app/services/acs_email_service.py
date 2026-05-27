@@ -712,12 +712,26 @@ async def _dispatch(to_email: str, subject: str, html_content: str) -> bool:
     """
     Routing de email por dominio del destinatario:
 
+    • Si EMAIL_FORCE_SMTP=true            →  SMTP directamente (bypass ACS)
     • @uniminuto.edu.co / @uniminuto.edu  →  Azure Communication Services (ACS)
       (con fallback a SMTP si ACS falla o no está configurado)
     • Cualquier otro dominio              →  SMTP directamente
 
     Nunca lanza excepciones; retorna False si el canal elegido falla.
     """
+    # Bypass ACS cuando está en modo prueba SMTP
+    if getattr(settings, "EMAIL_FORCE_SMTP", False):
+        logger.info("[email] EMAIL_FORCE_SMTP=true → usando SMTP para %s", to_email)
+        try:
+            from app.services.email_service import _send_email_sync
+            import asyncio
+            await asyncio.to_thread(_send_email_sync, to_email, subject, html_content)
+            logger.info("[email] SMTP (forzado) enviado a %s — %s", to_email, subject)
+            return True
+        except Exception as exc:
+            logger.error("[email] SMTP (forzado) falló para %s: %s", to_email, exc, exc_info=True)
+            return False
+
     use_acs = _is_configured() and _is_institutional(to_email)
 
     # ── ACS para correos institucionales ─────────────────────────────────────
