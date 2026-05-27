@@ -338,6 +338,7 @@ deploy() {
                 "PUBLIC_BACKEND_URL=https://${fqdn}" \
                 "CORS_ORIGINS=https://academic-risk-predictor-frontend.vercel.app" \
                 "CORS_ORIGIN_REGEX=https://.*\.vercel\.app" \
+                "CORS_ALLOW_CREDENTIALS=true" \
                 "FRONTEND_URL=https://academic-risk-predictor-frontend.vercel.app" \
                 "WAHA_URL=${waha_url}" \
                 "WAHA_API_KEY=${waha_api_key}" \
@@ -369,6 +370,7 @@ deploy() {
                 "PORT=8000" \
                 "CORS_ORIGINS=https://academic-risk-predictor-frontend.vercel.app" \
                 "CORS_ORIGIN_REGEX=https://.*\.vercel\.app" \
+                "CORS_ALLOW_CREDENTIALS=true" \
                 "FRONTEND_URL=https://academic-risk-predictor-frontend.vercel.app" \
                 "LOG_LEVEL=info" \
                 "MODEL_PATH=ml_models/modelo_logistico.joblib" \
