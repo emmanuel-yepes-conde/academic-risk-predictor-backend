@@ -1,0 +1,31 @@
+app/api/v1/endpoints/debug_notifications.py
+  s_b03b3a99345ebc::t_aca567f71f4158 1-161
+app/main.py
+  s_b03b3a99345ebc::t_4e2ec88c5ea7d4 163
+  s_b03b3a99345ebc::t_135bc2259ba844 22
+app/services/notification_service.py
+  s_b03b3a99345ebc::t_dfcc9f41b3edd6 142-148,151-155,159-199
+app/core/config.py
+  s_b03b3a99345ebc::t_6f172724d9c82b 167-170
+scripts/test_channels.py
+  s_b03b3a99345ebc::t_ff00a3d6eeb3d4 1-5,11-12,18-33,36-50,52-53,55-56,59-61,63,66-70,72-80,83-85,92-97,99-101,104,108-116,118-125,128,130-131,135,137-138,142,144-145,147-149,151-152,159,164-167,172-173,175-186,189-193,195-196,198-199,207-209,211-213,308,328,331,333-335,343-348,357-363,365,369,372,374-378
+  s_b03b3a99345ebc::t_209db60ee1da7a 6-10,13-17,34-35,51,54,57-58,62,64-65,71,81-82,86-91,98,102-103,105-107,117,126-127,129,132-134,136,139-141,143,146,150,153-158,160-163,168-171,174,187-188,194,197,200-206,210,214-307,309-327,329-330,332,336-342,349-356,364,366-368,370-371,373
+app/services/acs_email_service.py
+  s_b03b3a99345ebc::t_166a7705979576 715,722-734
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "3d89c718821766a4628413779c20c1e2504ea70d",
+  "prompts": {},
+  "sessions": {
+    "s_b03b3a99345ebc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "379dbf03-6b10-4ee4-83b4-56a99a81b41a",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "daforonda_meli <davidlujan.foronda@mercadolibre.com.co>"
+    }
+  }
+}
