@@ -8,7 +8,8 @@ import logging
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, EmailStr, Field
 
-from app.services.email_service import send_risk_alert, send_predictor_reminder
+from app.services.email_service import send_risk_alert
+from app.services.notification_service import _send_email as _send_via_routing
 
 logger = logging.getLogger(__name__)
 
@@ -99,21 +100,30 @@ async def predictor_reminder_endpoint(body: PredictorReminderRequest) -> Notific
     POST /api/v1/notifications/predictor-reminder
 
     Envía un recordatorio al estudiante para que use el predictor.
-    Si el envío falla se lanza HTTP 502 para que el cliente pueda reintentar.
+    Usa el routing unificado (ACS para @uniminuto, SMTP para el resto).
     """
-    sent = await send_predictor_reminder(
-        student_email=body.student_email,
-        student_name=body.student_name,
+    from app.services.acs_email_service import _reminder_html
+    primer_nombre = body.student_name.split()[0] if body.student_name else "estudiante"
+    sent = await _send_via_routing(
+        email=body.student_email,
+        name=body.student_name,
+        title="📊 ¿Has revisado tu riesgo académico esta semana?",
+        body=(
+            f"Hola {primer_nombre}, te invitamos a revisar tu predicción de riesgo académico "
+            "y recibir consejos personalizados para este semestre."
+        ),
+        html_content=_reminder_html(body.student_name),
     )
 
     if sent:
+        logger.warning("[Recordatorio] ✅ Enviado → %s", body.student_email)
         return NotificationResponse(
             success=True,
             message=f"Recordatorio enviado correctamente a {body.student_email}.",
         )
 
-    logger.warning("No se pudo enviar el recordatorio a %s", body.student_email)
+    logger.warning("[Recordatorio] ❌ Falló → %s", body.student_email)
     raise HTTPException(
         status_code=502,
-        detail="No se pudo enviar el correo de recordatorio. Verifica la configuración SMTP.",
+        detail="No se pudo enviar el correo de recordatorio. Revisa los logs del servidor.",
     )

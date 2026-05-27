@@ -810,6 +810,44 @@ async def send_professor_risk_summary(
     )
 
 
+def _reminder_html(student_name: str) -> str:
+    """HTML para recordatorio al estudiante — mismo header/footer que todos los templates."""
+    primer_nombre = student_name.split()[0] if student_name else "estudiante"
+    body = f"""
+      <h1 class="main-title"
+          style="margin:0 0 6px 0;font-size:21px;font-weight:700;color:{DARK};text-align:center;">
+        ¿Has revisado tu riesgo académico?
+      </h1>
+      <p style="margin:0 0 24px 0;font-size:13px;color:{MUTED};text-align:center;">
+        Hola <strong style="color:{DARK};">{primer_nombre}</strong>,
+        tu bienestar académico nos importa 💙
+      </p>
+
+      <p style="margin:0 0 16px 0;font-size:14px;line-height:1.7;color:{TEXT};">
+        Te invitamos a usar el <strong>predictor de riesgo académico</strong> para conocer
+        tu situación actual y recibir consejos personalizados que te ayuden a alcanzar
+        tus metas este semestre.
+      </p>
+
+      {_section_label("¿Qué obtienes al analizarte?")}
+      <div style="background:{CANVAS};border-radius:10px;padding:16px 20px;margin-bottom:24px;">
+        {"".join(f'<p style="margin:4px 0;font-size:14px;color:{TEXT};"><span style="color:{GREEN};font-weight:700;margin-right:8px;">✓</span>{item}</p>' for item in [
+          "Conoce tu probabilidad real de riesgo académico",
+          "Identifica tus áreas de mejora con análisis personalizado",
+          "Recibe recomendaciones concretas para mejorar tu rendimiento",
+          "Mantente al tanto de tus calificaciones en tiempo real",
+        ])}
+      </div>
+
+      {_btn("Ir a Academic Risk →", GREEN)}
+
+      <p style="margin:16px 0 0 0;font-size:12px;color:{MUTED};text-align:center;">
+        Puedes desactivar estos recordatorios desde tu perfil en la plataforma.
+      </p>
+    """
+    return _base_layout(GREEN, "RECORDATORIO ACADÉMICO", body)
+
+
 def _prediction_result_html(
     student_name: str,
     course_name: str,
