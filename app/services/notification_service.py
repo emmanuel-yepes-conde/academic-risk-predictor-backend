@@ -139,40 +139,61 @@ async def _send_whatsapp(phone: str, type: str, title: str, body: str) -> None:
         logger.warning("[notify] WhatsApp excepción → %s (chat=%s, type=%s)", exc, chat_id, type)
 
 
-async def _send_email(email: str, name: str, title: str, body: str) -> None:
+async def _send_email(
+    email: str,
+    name: str,
+    title: str,
+    body: str,
+    html_content: str | None = None,
+) -> bool:
     """
     Envía email con routing por dominio:
-    - @uniminuto.edu.co / @uniminuto.edu → Azure ACS
-    - Cualquier otro dominio             → SMTP
+    - @uniminuto.edu.co / @uniminuto.edu → Azure ACS (con fallback SMTP)
+    - Cualquier otro dominio             → SMTP directamente
+
+    Acepta html_content pre-construido; si no se pasa, genera un HTML mínimo.
+    Retorna True si se envió, False si falló (nunca lanza excepción).
     """
     try:
         from app.services.acs_email_service import _dispatch
-        # HTML mínimo pero con la paleta de marca
-        html = f"""<!DOCTYPE html><html><body
-          style="margin:0;padding:24px;background:#f8fafc;
-                 font-family:Arial,Helvetica,sans-serif;">
-          <div style="max-width:560px;margin:0 auto;background:#fff;
-                      border-radius:12px;padding:32px;
-                      box-shadow:0 2px 12px rgba(0,0,0,0.08);">
-            <div style="background:#1E3932;border-radius:8px;
-                        padding:14px 20px;margin-bottom:24px;">
-              <span style="color:#fff;font-size:16px;font-weight:700;">
-                Academic <span style="color:#d4e9e2;">Risk</span>
-              </span>
-            </div>
-            <h2 style="color:#1E3932;font-size:17px;margin:0 0 12px 0;">
-              {title}
-            </h2>
-            <p style="color:#4a5568;font-size:14px;line-height:1.7;
-                      white-space:pre-wrap;margin:0 0 20px 0;">
-              {body}
-            </p>
-            <hr style="border:none;border-top:1px solid #e2e8f0;margin:0"/>
-            <p style="color:#9ca3af;font-size:11px;margin:16px 0 0 0;">
-              Mensaje automático — Academic Risk Predictor
-            </p>
-          </div>
-        </body></html>"""
-        await _dispatch(to_email=email, subject=title, html_content=html)
-    except (ImportError, Exception) as exc:
-        logger.debug("[notify] email dispatch unavailable: %s", exc)
+
+        if not html_content:
+            html_content = f"""<!DOCTYPE html><html><body
+              style="margin:0;padding:24px;background:#f8fafc;
+                     font-family:Arial,Helvetica,sans-serif;">
+              <div style="max-width:560px;margin:0 auto;background:#fff;
+                          border-radius:12px;padding:32px;
+                          box-shadow:0 2px 12px rgba(0,0,0,0.08);">
+                <div style="background:#1E3932;border-radius:8px;
+                            padding:14px 20px;margin-bottom:24px;">
+                  <span style="color:#fff;font-size:16px;font-weight:700;">
+                    Academic <span style="color:#d4e9e2;">Risk</span>
+                  </span>
+                </div>
+                <h2 style="color:#1E3932;font-size:17px;margin:0 0 12px 0;">
+                  {title}
+                </h2>
+                <p style="color:#4a5568;font-size:14px;line-height:1.7;
+                          white-space:pre-wrap;margin:0 0 20px 0;">
+                  {body}
+                </p>
+                <hr style="border:none;border-top:1px solid #e2e8f0;margin:0"/>
+                <p style="color:#9ca3af;font-size:11px;margin:16px 0 0 0;">
+                  Mensaje automático — Academic Risk Predictor
+                </p>
+              </div>
+            </body></html>"""
+
+        ok = await _dispatch(to_email=email, subject=title, html_content=html_content)
+        if ok:
+            logger.info("[notify] Email enviado → %s (%s)", email, title)
+        else:
+            logger.warning("[notify] _dispatch retornó False para %s — revisa logs de ACS/SMTP", email)
+        return ok
+    except ImportError as exc:
+        logger.error("[notify] acs_email_service no disponible: %s", exc)
+        return False
+    except Exception as exc:
+        # Era logger.debug → INVISIBLE en producción. Cambiado a warning.
+        logger.warning("[notify] Email falló para %s: %s", email, exc)
+        return False

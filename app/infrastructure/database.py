@@ -36,6 +36,16 @@ engine = create_async_engine(settings.DATABASE_URL, **_engine_kwargs)
 
 AsyncSessionFactory = async_sessionmaker(engine, expire_on_commit=False)
 
+# Engine dedicado para background tasks: siempre NullPool para evitar el error
+# "Task got Future attached to a different loop" que ocurre cuando asyncpg
+# intenta reciclar conexiones del pool desde un contexto asyncio diferente.
+_bg_engine = create_async_engine(
+    settings.DATABASE_URL,
+    echo=settings.DB_ECHO,
+    poolclass=NullPool,
+)
+BackgroundSessionFactory = async_sessionmaker(_bg_engine, expire_on_commit=False)
+
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
     """

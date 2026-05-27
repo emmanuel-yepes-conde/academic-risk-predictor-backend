@@ -86,15 +86,23 @@ class ReferralService:
             "updated_at":            datetime.now(timezone.utc),
         })
 
-        # ── Notificaciones ACS (fire-and-forget, no bloquea la respuesta) ──
+        # ── Notificaciones (fire-and-forget, no bloquea la respuesta) ──────────
         try:
+            from app.infrastructure.models.subject import Subject
             course  = await self._get_course(enrollment.course_id)
             student = await self._get_user(enrollment.student_id)
 
+            # Nombre de la materia via Subject
+            subj_result = await self._session.execute(
+                select(Subject).where(Subject.id == course.subject_id)
+            )
+            subject = subj_result.scalar_one_or_none()
+            course_display = subject.name if subject else f"Sección {course.section}"
+
             tipo_display = (
-                body.tipo_remision_otro
-                if body.tipo_remision.value == "Otros" and body.tipo_remision_otro
-                else body.tipo_remision.value
+                body.referral_type_other
+                if body.referral_type.value == "Otros" and body.referral_type_other
+                else body.referral_type.value
             )
 
             if student:
@@ -102,20 +110,20 @@ class ReferralService:
                     student_name=student.full_name,
                     student_email=student.email,
                     professor_name=getattr(current_user, "full_name", "Docente"),
-                    course_name=f"{course.code} — {course.name}",
+                    course_name=course_display,
                     tipo_remision=tipo_display,
-                    observaciones=body.observaciones or "Sin observaciones.",
-                    fecha_remision=str(body.fecha_remision),
+                    observaciones=body.observations or "Sin observaciones.",
+                    fecha_remision=str(body.referral_date),
                 )
-                logger.info(
-                    "Notificaciones remisión %s → estudiante=%s, consejería=%s",
-                    referral.id,
+                logger.warning(
+                    "[Remision] ✅ Notificaciones enviadas → estudiante=%s, consejería=%s (id=%s)",
                     results["student"],
                     results["consejeria"],
+                    referral.id,
                 )
         except Exception as exc:
             # Las notificaciones nunca deben bloquear la creación de la remisión
-            logger.error("Error al enviar notificaciones ACS: %s", exc, exc_info=True)
+            logger.error("[Remision] ❌ Error al enviar notificaciones: %s", exc, exc_info=True)
 
         return ReferralRead.model_validate(referral)
 

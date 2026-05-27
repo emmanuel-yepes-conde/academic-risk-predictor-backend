@@ -351,12 +351,24 @@ async def _send_whatsapp_risk_alert(
     primer      = nombre.split()[0]
     nivel_emoji = {"ALTO": "🔴", "MEDIO": "🟡", "BAJO": "🟢"}.get(nivel, "📊")
     nivel_texto = {"ALTO": "ALTO", "MEDIO": "MEDIO", "BAJO": "BAJO"}.get(nivel, nivel)
+
+    from datetime import datetime, timezone
+    from zoneinfo import ZoneInfo
+    _col = datetime.now(timezone.utc).astimezone(ZoneInfo("America/Bogota"))
+    _dias   = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"]
+    _meses  = ["Enero","Febrero","Marzo","Abril","Mayo","Junio",
+               "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
+    fecha_hora = (f"{_dias[_col.weekday()]} {_col.day} de {_meses[_col.month-1]} "
+                  f"de {_col.year}, {_col.strftime('%I:%M %p').lower()}")
+
+    frontend_url = settings.FRONTEND_URL.rstrip("/")
     texto = (
         f"{nivel_emoji} *Predicción de riesgo académico*\n\n"
         f"Hola {primer}! Risko analizó tu rendimiento en *{course_name}*.\n\n"
         f"📊 *Nivel de riesgo:* {nivel_texto} ({risk_pct:.0f}%)\n\n"
         f"{analisis}\n\n"
-        f"Ingresa a la plataforma para ver tu simulador y opciones de mejora 👉 Academic Risk"
+        f"🕐 *Calculado el:* {fecha_hora}\n\n"
+        f"Para ver el análisis completo y tu simulador, ingresa a la plataforma 👉 {frontend_url}"
     )
 
     url = f"{settings.WAHA_URL.rstrip('/')}/api/sendText"
@@ -389,15 +401,30 @@ async def _notify_student_prediction_result(
     """
     try:
         from app.core.config import settings
-        from app.infrastructure.database import engine
-        from sqlalchemy.ext.asyncio import AsyncSession as _AsyncSession
+        from app.infrastructure.database import BackgroundSessionFactory as AsyncSessionFactory
         from app.infrastructure.models.enrollment import Enrollment as EnrollmentModel
         from app.infrastructure.models.course import Course as CourseModel
+        from app.infrastructure.models.subject import Subject as SubjectModel
         from app.infrastructure.models.user import User as UserModel
         from app.services.push_notification_service import send_push_to_user
         from app.services.notification_service import notify_by_user_id
 
-        async with _AsyncSession(engine) as bg_session:
+        # ── Fase 1: leer datos de BD y guardar notificación in-app ──────────────
+        # La sesión se cierra ANTES de enviar email/WhatsApp para evitar
+        # el error "Task got Future attached to a different loop" que ocurre
+        # cuando asyncio.to_thread (SMTP) corre mientras hay una conexión
+        # asyncpg activa en el mismo contexto.
+        student_phone  = None
+        student_email  = None
+        student_name   = ""
+        course_name    = "tu materia"
+        wa_enabled     = False
+        email_enabled  = False
+        course_id_str  = ""
+        risk_pct       = probability * 100
+        primera_linea  = analisis_ia.split("\n\n")[0]
+
+        async with AsyncSessionFactory() as bg_session:
             enroll_q = await bg_session.execute(
                 select(EnrollmentModel).where(EnrollmentModel.id == enrollment_id)
             )
@@ -413,171 +440,139 @@ async def _notify_student_prediction_result(
             course  = course_q.scalar_one_or_none()
             student = user_q.scalar_one_or_none()
 
-            course_name   = course.name if course else "tu materia"
+            if course:
+                subj_q = await bg_session.execute(
+                    select(SubjectModel).where(SubjectModel.id == course.subject_id)
+                )
+                subject = subj_q.scalar_one_or_none()
+                course_name = subject.name if subject else "tu materia"
+
             student_name  = student.full_name if student else ""
             student_phone = student.phone if student else None
             wa_enabled    = getattr(student, "whatsapp_enabled", True) if student else False
-            risk_pct      = probability * 100
-            primera_linea = analisis_ia.split("\n\n")[0]
+            email_enabled = getattr(student, "email_enabled", True) if student else False
+            student_email = (
+                getattr(student, "institutional_email", None) or getattr(student, "email", None)
+            ) if student else None
+            course_id_str = str(enrollment.course_id)
+            student_id    = enrollment.student_id
 
-            # Título y cuerpo adaptados al nivel
+            # Título y cuerpo in-app
             if nivel_riesgo == "ALTO":
-                notif_type  = "RISK_ALTO"
-                title       = f"[RIESGO ALTO] {course_name}"
-                body        = primera_linea or f"Tu riesgo de reprobar es ALTO ({risk_pct:.0f}%). Busca asesoria cuanto antes."
+                notif_type = "RISK_ALTO"
+                title      = f"[RIESGO ALTO] {course_name}"
+                body       = primera_linea or f"Tu riesgo de reprobar es ALTO ({risk_pct:.0f}%). Busca asesoria cuanto antes."
             elif nivel_riesgo == "MEDIO":
-                notif_type  = "RISK_MEDIO"
-                title       = f"[RIESGO MEDIO] {course_name}"
-                body        = primera_linea or f"Tu riesgo de reprobar es MEDIO ({risk_pct:.0f}%). Refuerza los temas pendientes."
-            else:  # BAJO
-                notif_type  = "RISK_BAJO"
-                title       = f"[RIESGO BAJO] {course_name}"
-                body        = f"Riesgo de reprobar: BAJO ({risk_pct:.0f}%). Vas por buen camino, sigue asi."
+                notif_type = "RISK_MEDIO"
+                title      = f"[RIESGO MEDIO] {course_name}"
+                body       = primera_linea or f"Tu riesgo de reprobar es MEDIO ({risk_pct:.0f}%). Refuerza los temas pendientes."
+            else:
+                notif_type = "RISK_BAJO"
+                title      = f"[RIESGO BAJO] {course_name}"
+                body       = f"Riesgo de reprobar: BAJO ({risk_pct:.0f}%). Vas por buen camino, sigue asi."
 
-            url = f"/materia/{enrollment.course_id}"
+            url = f"/materia/{course_id_str}"
 
-            # Push notification
+            # Push (necesita sesión)
             try:
                 sent = await send_push_to_user(
-                    user_id=str(enrollment.student_id),
-                    title=title,
-                    body=body,
-                    url=url,
-                    session=bg_session,
-                )
-                logger.info(
-                    "[Prediccion] Push %s → student %s riesgo %s en %s (sent=%d)",
-                    "enviado" if sent > 0 else "sin dispositivos",
-                    enrollment.student_id, nivel_riesgo, course_name, sent,
+                    user_id=str(student_id), title=title, body=body,
+                    url=url, session=bg_session,
                 )
             except Exception as _push_err:
                 logger.warning("[Prediccion] push falló: %s", _push_err)
 
-            # In-app (campanita)
+            # In-app (necesita sesión)
             try:
                 await notify_by_user_id(
-                    db=bg_session,
-                    user_id=enrollment.student_id,
-                    type=notif_type,
-                    title=title,
-                    body=body,
-                    data={"course_id": str(enrollment.course_id), "url": url, "risk_pct": round(risk_pct, 1)},
+                    db=bg_session, user_id=student_id, type=notif_type,
+                    title=title, body=body,
+                    data={"course_id": course_id_str, "url": url, "risk_pct": round(risk_pct, 1)},
                 )
-                logger.info("[Prediccion] In-app notif creada → student %s", enrollment.student_id)
             except Exception as _notif_err:
                 logger.warning("[Prediccion] in-app notify falló: %s", _notif_err)
+        # ── Sesión cerrada — ahora enviamos WhatsApp y email sin conexión DB ──
 
-            # WhatsApp — para todos los niveles si está habilitado y tiene teléfono
-            if student_phone and wa_enabled:
-                primer_nombre = student_name.split()[0] if student_name else "estudiante"
+        # WhatsApp
+        primer_nombre = student_name.split()[0] if student_name else "estudiante"
+        from datetime import datetime as _dt, timezone as _tz
+        from zoneinfo import ZoneInfo as _ZI
+        _col = _dt.now(_tz.utc).astimezone(_ZI("America/Bogota"))
+        _dias  = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"]
+        _meses = ["Enero","Febrero","Marzo","Abril","Mayo","Junio",
+                  "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
+        _fecha = (f"{_dias[_col.weekday()]} {_col.day} de {_meses[_col.month-1]} "
+                  f"de {_col.year}, {_col.strftime('%I:%M %p').lower()}")
+        _frontend = settings.FRONTEND_URL.rstrip("/")
+
+        if student_phone and wa_enabled:
+            try:
                 if nivel_riesgo == "BAJO":
                     wa_text = (
                         f"🟢 *Predicción de riesgo académico*\n\n"
                         f"Hola {primer_nombre}! Risko analizó tu rendimiento en *{course_name}*.\n\n"
                         f"📊 *Nivel de riesgo:* BAJO ({risk_pct:.0f}%)\n\n"
-                        f"Vas por muy buen camino. Sigue con ese ritmo de estudio y esa dedicación! 💪"
+                        f"Vas por muy buen camino. Sigue con ese ritmo de estudio y esa dedicación! 💪\n\n"
+                        f"🕐 *Calculado el:* {_fecha}\n\n"
+                        f"Para ver el análisis completo, ingresa a la plataforma 👉 {_frontend}"
                     )
-                else:
-                    wa_text = None  # usa _send_whatsapp_risk_alert con analisis completo
-
-                if wa_text:
-                    # Mensaje directo para BAJO
                     await _send_wa_text(student_phone, wa_text)
                 else:
-                    # Analisis completo para MEDIO/ALTO
                     await _send_whatsapp_risk_alert(
-                        phone=student_phone,
-                        student_name=student_name,
-                        course_name=course_name,
-                        risk_pct=risk_pct,
-                        nivel=nivel_riesgo,
-                        analisis=analisis_ia,
-                        course_id=str(enrollment.course_id),
+                        phone=student_phone, student_name=student_name,
+                        course_name=course_name, risk_pct=risk_pct,
+                        nivel=nivel_riesgo, analisis=analisis_ia,
+                        course_id=course_id_str,
                     )
-            else:
-                logger.info(
-                    "[Prediccion] WhatsApp omitido → phone=%s wa_enabled=%s",
-                    bool(student_phone), wa_enabled,
-                )
+                logger.warning("[Prediccion] ✅ WhatsApp enviado → %s (nivel=%s)", student_phone, nivel_riesgo)
+            except Exception as _wa_err:
+                logger.warning("[Prediccion] ❌ WhatsApp excepción → %s: %s", student_phone, _wa_err)
+        else:
+            logger.warning(
+                "[Prediccion] ⏭️  WhatsApp omitido → phone=%s wa_enabled=%s",
+                bool(student_phone), wa_enabled,
+            )
 
-            # Email — si el estudiante lo tiene habilitado
-            email_enabled = getattr(student, "email_enabled", True) if student else False
-            student_email = (
-                getattr(student, "institutional_email", None) or getattr(student, "email", None)
-            ) if student else None
-            if email_enabled and student_email:
-                try:
-                    from app.services.notification_service import _send_email as _send_notif_email
-                    nivel_emoji = {"ALTO": "🔴", "MEDIO": "🟡", "BAJO": "🟢"}.get(nivel_riesgo, "📊")
-                    nivel_color = {"ALTO": "#dc2626", "MEDIO": "#d97706", "BAJO": "#16a34a"}.get(nivel_riesgo, "#1E3932")
-                    nivel_bg    = {"ALTO": "#fee2e2", "MEDIO": "#fef3c7", "BAJO": "#dcfce7"}.get(nivel_riesgo, "#f0fdf4")
-                    email_subject = f"{nivel_emoji} Predicción de riesgo académico — {course_name}"
-                    primer_nombre = student_name.split()[0] if student_name else "estudiante"
-                    email_body = (
-                        f"Hola {primer_nombre},\n\n"
-                        f"Risko analizó tu rendimiento académico en {course_name} "
-                        f"y determinó un nivel de riesgo {nivel_riesgo} ({risk_pct:.0f}%).\n\n"
-                        f"{analisis_ia}\n\n"
-                        f"Ingresa a Academic Risk para ver tu simulador y explorar estrategias de mejora."
-                    )
-                    # HTML enriquecido con colores del nivel de riesgo
-                    analisis_html = analisis_ia.replace("\n", "<br>")
-                    html_content = f"""<!DOCTYPE html><html><body
-                      style="margin:0;padding:24px;background:#f8fafc;font-family:Arial,Helvetica,sans-serif;">
-                      <div style="max-width:580px;margin:0 auto;background:#fff;border-radius:12px;
-                                  padding:32px;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
-                        <div style="background:#1E3932;border-radius:8px;padding:14px 20px;margin-bottom:24px;">
-                          <span style="color:#fff;font-size:16px;font-weight:700;">
-                            Academic <span style="color:#d4e9e2;">Risk</span>
-                          </span>
-                        </div>
-                        <h2 style="color:#1E3932;font-size:18px;margin:0 0 4px 0;">
-                          Predicción de riesgo académico
-                        </h2>
-                        <p style="color:#4a5568;font-size:14px;margin:0 0 20px 0;">
-                          Hola <strong>{primer_nombre}</strong>, aquí está tu análisis para <strong>{course_name}</strong>.
-                        </p>
-                        <div style="display:inline-flex;align-items:center;gap:8px;
-                                    background:{nivel_bg};border:1.5px solid {nivel_color};
-                                    border-radius:8px;padding:10px 16px;margin-bottom:20px;">
-                          <span style="font-size:20px;">{nivel_emoji}</span>
-                          <div>
-                            <p style="margin:0;font-size:13px;font-weight:700;color:{nivel_color};">
-                              Riesgo {nivel_riesgo}
-                            </p>
-                            <p style="margin:0;font-size:12px;color:{nivel_color};opacity:0.85;">
-                              Probabilidad de reprobar: {risk_pct:.0f}%
-                            </p>
-                          </div>
-                        </div>
-                        <p style="color:#4a5568;font-size:14px;line-height:1.7;margin:0 0 20px 0;">
-                          {analisis_html}
-                        </p>
-                        <a href="#" style="display:inline-block;background:#1E3932;color:#fff;
-                                           font-size:14px;font-weight:700;padding:12px 24px;
-                                           border-radius:8px;text-decoration:none;margin-bottom:24px;">
-                          Ver mi progreso en Academic Risk →
-                        </a>
-                        <hr style="border:none;border-top:1px solid #e2e8f0;margin:0"/>
-                        <p style="color:#9ca3af;font-size:11px;margin:16px 0 0 0;">
-                          Puedes desactivar estas notificaciones desde tu perfil en la plataforma.
-                        </p>
-                      </div>
-                    </body></html>"""
-                    await _send_notif_email(
-                        email=student_email,
-                        name=student_name,
-                        title=email_subject,
-                        body=email_body,
-                    )
-                    logger.info("[Prediccion] Email enviado → %s (nivel=%s)", student_email, nivel_riesgo)
-                except Exception as _email_err:
-                    logger.warning("[Prediccion] Email falló → %s: %s", student_email, _email_err)
-            else:
-                logger.info(
-                    "[Prediccion] Email omitido → email=%s email_enabled=%s",
-                    bool(student_email), email_enabled,
+        # Email (fuera de la sesión DB — sin riesgo de event loop conflict)
+        if email_enabled and student_email:
+            try:
+                from app.services.notification_service import _send_email as _send_notif_email
+                from app.services.acs_email_service import _prediction_result_html
+                nivel_emoji   = {"ALTO": "🔴", "MEDIO": "🟡", "BAJO": "🟢"}.get(nivel_riesgo, "📊")
+                email_subject = f"{nivel_emoji} Predicción de riesgo académico — {course_name}"
+                email_body = (
+                    f"Hola {primer_nombre},\n\n"
+                    f"Risko analizó tu rendimiento en {course_name} "
+                    f"y determinó un nivel de riesgo {nivel_riesgo} ({risk_pct:.0f}%).\n\n"
+                    f"Ingresa a Academic Risk para ver el análisis completo."
                 )
+                # HTML unificado — usa el mismo header/footer que todos los templates
+                html_content = _prediction_result_html(
+                    student_name=student_name,
+                    course_name=course_name,
+                    nivel_riesgo=nivel_riesgo,
+                    risk_pct=risk_pct,
+                    analisis_ia=analisis_ia,
+                    frontend_url=settings.FRONTEND_URL.rstrip("/"),
+                )
+                ok = await _send_notif_email(
+                    email=student_email,
+                    name=student_name,
+                    title=email_subject,
+                    body=email_body,
+                    html_content=html_content,
+                )
+                if ok:
+                    logger.warning("[Prediccion] ✅ Email enviado → %s (nivel=%s)", student_email, nivel_riesgo)
+                else:
+                    logger.warning("[Prediccion] ❌ Email falló (sin excepción) → %s", student_email)
+            except Exception as _email_err:
+                logger.warning("[Prediccion] ❌ Email excepción → %s: %s", student_email, _email_err)
+        else:
+            logger.warning(
+                "[Prediccion] ⏭️  Email omitido → email=%s email_enabled=%s",
+                bool(student_email), email_enabled,
+            )
 
     except Exception as exc:
         logger.error("[Prediccion] Error en notificacion de resultado: %s", exc, exc_info=True)
@@ -624,8 +619,7 @@ async def _push_risk_alert_if_needed(
         primera_linea = analisis_completo.split("\n\n")[0]
 
         # Abrir sesión propia para el background task
-        from app.infrastructure.database import engine
-        from sqlalchemy.ext.asyncio import AsyncSession as _AsyncSession
+        from app.infrastructure.database import BackgroundSessionFactory as AsyncSessionFactory
         from app.infrastructure.models.enrollment import Enrollment as EnrollmentModel
         from app.infrastructure.models.course import Course as CourseModel
         from app.infrastructure.models.user import User as UserModel
@@ -633,7 +627,7 @@ async def _push_risk_alert_if_needed(
             send_push_to_user, build_risk_alert_message,
         )
 
-        async with _AsyncSession(engine) as bg_session:
+        async with AsyncSessionFactory() as bg_session:
             # Obtener enrollment para conocer student_id y course_id
             enroll_q = await bg_session.execute(
                 select(EnrollmentModel).where(EnrollmentModel.id == enrollment_id)
