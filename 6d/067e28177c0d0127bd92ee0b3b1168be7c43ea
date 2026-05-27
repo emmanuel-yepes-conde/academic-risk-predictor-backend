@@ -1,0 +1,23 @@
+infra/deploy.sh
+  s_b03b3a99345ebc::t_7013f11e069d4f 339,370
+  s_b03b3a99345ebc::t_908f267aff876d 372
+  s_b03b3a99345ebc::t_cba2c20d77a5be 341
+app/core/config.py
+  s_b03b3a99345ebc::t_d56a4feb1ed049 183
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "6d067e28177c0d0127bd92ee0b3b1168be7c43ea",
+  "prompts": {},
+  "sessions": {
+    "s_b03b3a99345ebc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "379dbf03-6b10-4ee4-83b4-56a99a81b41a",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "daforonda_meli <davidlujan.foronda@mercadolibre.com.co>"
+    }
+  }
+}
