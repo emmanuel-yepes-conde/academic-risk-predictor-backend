@@ -137,19 +137,33 @@ async def test_email(
     - EMAIL_FORCE_SMTP=false → routing normal (ACS para @uniminuto, SMTP para resto)
     """
     from app.services.notification_service import _send_email
+    from app.services.acs_email_service import _base_layout, GREEN, DARK, MUTED, TEXT, CANVAS, _btn
 
     channel = "SMTP (forzado)" if getattr(settings, "EMAIL_FORCE_SMTP", False) else "routing normal"
     logger.info("[debug-notify] Enviando email de prueba a %s via %s", body.email, channel)
+
+    html_content = _base_layout(GREEN, "PRUEBA DE CANAL", f"""
+      <h1 style="margin:0 0 6px 0;font-size:21px;font-weight:700;color:{DARK};text-align:center;">
+        ✅ Canal de email funcionando
+      </h1>
+      <p style="margin:0 0 24px 0;font-size:13px;color:{MUTED};text-align:center;">
+        Prueba de diagnóstico — Academic Risk
+      </p>
+      <div style="background:{CANVAS};border-radius:10px;padding:16px 20px;margin-bottom:24px;">
+        <p style="margin:4px 0;font-size:14px;color:{TEXT};"><strong>Canal:</strong> {channel}</p>
+        <p style="margin:4px 0;font-size:14px;color:{TEXT};"><strong>Servidor SMTP:</strong> {settings.SMTP_SERVER}:{settings.SMTP_PORT}</p>
+      </div>
+      <p style="margin:0;font-size:12px;color:{MUTED};text-align:center;">
+        Este es un mensaje automático de diagnóstico.
+      </p>
+    """)
 
     ok = await _send_email(
         email=body.email,
         name="Admin",
         title=f"🧪 Prueba Academic Risk — {channel}",
-        body=(
-            f"Este correo confirma que el canal de email está funcionando.\n\n"
-            f"Canal: {channel}\n"
-            f"Servidor SMTP: {settings.SMTP_SERVER}:{settings.SMTP_PORT}"
-        ),
+        body=f"Canal: {channel} | SMTP: {settings.SMTP_SERVER}:{settings.SMTP_PORT}",
+        html_content=html_content,
     )
 
     if ok:
