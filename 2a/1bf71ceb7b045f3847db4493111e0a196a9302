@@ -1,0 +1,20 @@
+infra/deploy.sh
+  s_b03b3a99345ebc::t_00f51cde541d5c 339
+  s_b03b3a99345ebc::t_0cd620af695c39 369
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "2a1bf71ceb7b045f3847db4493111e0a196a9302",
+  "prompts": {},
+  "sessions": {
+    "s_b03b3a99345ebc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "379dbf03-6b10-4ee4-83b4-56a99a81b41a",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "daforonda_meli <davidlujan.foronda@mercadolibre.com.co>"
+    }
+  }
+}
