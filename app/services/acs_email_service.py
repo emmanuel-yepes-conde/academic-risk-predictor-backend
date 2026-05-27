@@ -810,6 +810,69 @@ async def send_professor_risk_summary(
     )
 
 
+def _prediction_result_html(
+    student_name: str,
+    course_name: str,
+    nivel_riesgo: str,
+    risk_pct: float,
+    analisis_ia: str,
+    frontend_url: str,
+) -> str:
+    """HTML para notificación de predicción de riesgo al estudiante."""
+    primer_nombre = student_name.split()[0] if student_name else "estudiante"
+    nivel_color = RISK_HIGH if nivel_riesgo == "ALTO" else (RISK_MED if nivel_riesgo == "MEDIO" else RISK_LOW)
+    nivel_bg    = {"ALTO": "#FEF2F2", "MEDIO": "#FFFBEB", "BAJO": "#F0FDF4"}.get(nivel_riesgo, "#F0FDF4")
+    nivel_emoji = {"ALTO": "🔴", "MEDIO": "🟡", "BAJO": "🟢"}.get(nivel_riesgo, "📊")
+    badge_text  = "ALERTA DE RIESGO" if nivel_riesgo == "ALTO" else ("RIESGO MEDIO" if nivel_riesgo == "MEDIO" else "PREDICCIÓN")
+    analisis_html = analisis_ia.replace("\n", "<br>")
+
+    body = f"""
+      <h1 class="main-title"
+          style="margin:0 0 6px 0;font-size:21px;font-weight:700;
+                 color:{DARK};text-align:center;">
+        Análisis de Riesgo Académico
+      </h1>
+      <p style="margin:0 0 28px 0;font-size:13px;color:{MUTED};text-align:center;">
+        Hola <strong style="color:{DARK};">{primer_nombre}</strong>,
+        aquí está tu resultado para
+        <strong style="color:{DARK};">{course_name}</strong>.
+      </p>
+
+      <!-- Badge de nivel -->
+      <table width="100%" cellpadding="0" cellspacing="0"
+             style="margin-bottom:28px;">
+        <tr><td align="center">
+          <div style="display:inline-block;background:{nivel_bg};
+                      border:2px solid {nivel_color};border-radius:12px;
+                      padding:18px 32px;text-align:center;">
+            <div style="font-size:32px;margin-bottom:6px;">{nivel_emoji}</div>
+            <div style="color:{nivel_color};font-size:20px;font-weight:800;
+                        letter-spacing:1px;">RIESGO {nivel_riesgo}</div>
+            <div style="color:{nivel_color};font-size:13px;margin-top:4px;opacity:0.85;">
+              Probabilidad de reprobar: <strong>{risk_pct:.0f}%</strong>
+            </div>
+          </div>
+        </td></tr>
+      </table>
+
+      <!-- Análisis detallado -->
+      {_section_label("📋 Análisis Detallado")}
+      <div style="background:{CANVAS};border-left:4px solid {nivel_color};
+                  border-radius:0 8px 8px 0;padding:16px 20px;margin-bottom:24px;">
+        <p style="margin:0;font-size:14px;line-height:1.8;color:{TEXT};">
+          {analisis_html}
+        </p>
+      </div>
+
+      {_btn("Ver mi progreso en Academic Risk →", frontend_url)}
+
+      <p style="margin:16px 0 0 0;font-size:12px;color:{MUTED};text-align:center;">
+        Puedes activar o desactivar estas notificaciones desde tu perfil en la plataforma.
+      </p>
+    """
+    return _base_layout(nivel_color, badge_text, body)
+
+
 async def notify_referral_created(
     *,
     student_name: str, student_email: str,

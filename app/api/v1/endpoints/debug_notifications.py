@@ -159,3 +159,36 @@ async def test_email(
             status_code=502,
             detail=f"El correo no se pudo enviar a {body.email}. Revisa los logs del servidor.",
         )
+
+
+# ─── POST /chatbot/force-timeout ─────────────────────────────────────────────
+
+@router.post("/chatbot/force-timeout")
+async def force_chatbot_timeout(
+    _: CurrentUser = Depends(_require_admin),
+) -> dict:
+    """
+    Fuerza el chequeo de timeouts del chatbot ignorando el tiempo transcurrido.
+    Útil para probar los mensajes de seguimiento/despedida sin esperar 3 minutos.
+    """
+    from app.application.services.waha_chatbot_service import (
+        check_chatbot_timeouts,
+        _sessions,
+    )
+
+    sessions_before = dict(_sessions)
+    await check_chatbot_timeouts(force=True)
+    sessions_after = dict(_sessions)
+
+    processed = [
+        phone for phone in sessions_before
+        if phone not in sessions_after
+        or sessions_before[phone].get("step") != sessions_after.get(phone, {}).get("step")
+    ]
+
+    return {
+        "ok": True,
+        "sessions_found": len(sessions_before),
+        "sessions_processed": len(processed),
+        "phones": processed,
+    }
