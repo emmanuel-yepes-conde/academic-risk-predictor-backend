@@ -1,0 +1,23 @@
+app/application/services/waha_chatbot_service.py
+  s_b03b3a99345ebc::t_faa0018440e754 70-72
+  s_b03b3a99345ebc::t_365d2d53955e18 190-217
+  s_b03b3a99345ebc::t_dbd659b3f73912 414
+  s_b03b3a99345ebc::t_bfa4a2126de0e7 447-456
+  s_b03b3a99345ebc::t_92ef97f40022f9 128-138
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "db970e102346d41621573108db8e2c4dcd2339b8",
+  "prompts": {},
+  "sessions": {
+    "s_b03b3a99345ebc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "379dbf03-6b10-4ee4-83b4-56a99a81b41a",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "daforonda_meli <davidlujan.foronda@mercadolibre.com.co>"
+    }
+  }
+}
