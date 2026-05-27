@@ -1,0 +1,50 @@
+app/api/v1/endpoints/debug_notifications.py
+  s_b03b3a99345ebc::t_bcba8fc91804b1 162-194
+app/application/services/referral_service.py
+  s_b03b3a99345ebc::t_0c7b6953a5f251 89,91,95-101,103-105,113,115-116,118-119,122,126
+app/application/services/waha_chatbot_service.py
+  s_b03b3a99345ebc::t_f5214fb4921be2 553-556,558-565
+  s_b03b3a99345ebc::t_062a844ec6859d 59-60
+  s_b03b3a99345ebc::t_79392e8d3b4c45 62-67
+  s_b03b3a99345ebc::t_5bc45f7c393d31 303-305
+  s_b03b3a99345ebc::t_e1be5d53081817 207-208
+  s_b03b3a99345ebc::t_38912e304d708b 502-539
+  s_b03b3a99345ebc::t_888cacd37720f2 336-337,339,344-345,349,352,354,356,358
+  s_b03b3a99345ebc::t_843948238a72ad 88-104
+  s_b03b3a99345ebc::t_5d683ebd5e4e89 472-476,478-486,490
+  s_b03b3a99345ebc::t_9d98750a1b3acd 408,411-415,427,429-440,444-447,454-455,459-462
+app/api/v1/endpoints/enrollments.py
+  s_b03b3a99345ebc::t_ff4ccff091a78f 407,443-448
+  s_b03b3a99345ebc::t_a7d75a8c495672 509,515-517,522-525,527-534
+  s_b03b3a99345ebc::t_240291fc9d8da6 559-563,569,571,574-575
+  s_b03b3a99345ebc::t_1fd074ebd8e68a 412-426,449,453-458,460,462-464,466-472,474,476,479-480,485,488-490,494-506,508,536-539,542-544,546,548
+  s_b03b3a99345ebc::t_a2eda6ddb49abd 354-357,361-364,370-371
+  s_b03b3a99345ebc::t_3aabb59e29f692 358-360
+  s_b03b3a99345ebc::t_ad39db231aa05c 540-541,545,547
+  s_b03b3a99345ebc::t_51c2c0fe6f94f5 630
+  s_b03b3a99345ebc::t_7afef51e335b2d 549-557
+  s_b03b3a99345ebc::t_5cd5247f930621 507
+  s_b03b3a99345ebc::t_96b1404d8b5737 558,565-568,570,572-573
+  s_b03b3a99345ebc::t_860c77279ee002 404,622
+  s_b03b3a99345ebc::t_3926a7a27eea94 427
+app/infrastructure/database.py
+  s_b03b3a99345ebc::t_0b54aed247c9bd 39-48
+app/services/acs_email_service.py
+  s_b03b3a99345ebc::t_0defdbef9c3b3f 813-875
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "7d3a93017eeee11f78137d7b35f4168eb1c90f40",
+  "prompts": {},
+  "sessions": {
+    "s_b03b3a99345ebc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "379dbf03-6b10-4ee4-83b4-56a99a81b41a",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "daforonda_meli <davidlujan.foronda@mercadolibre.com.co>"
+    }
+  }
+}
