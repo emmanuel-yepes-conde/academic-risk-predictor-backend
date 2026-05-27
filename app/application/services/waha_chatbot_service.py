@@ -67,6 +67,9 @@ class WahaChatbotService:
         if step == "WAITING_SUBJECT":
             return await self._handle_subject_selection(phone, text, state)
 
+        if step == "WAITING_THANKS_RESPONSE":
+            return self._handle_thanks_response(phone, text, state)
+
         if step == "WAITING_FOLLOWUP":
             return self._handle_followup_response(phone, text, state)
 
@@ -122,6 +125,17 @@ class WahaChatbotService:
     ) -> str:
         enrollments: List[dict] = state.get("enrollments", [])
         student_name: str = state.get("student_name", "")
+        first = student_name.split()[0] if student_name else "estudiante"
+
+        # Detectar agradecimiento antes de intentar procesar como materia
+        if _is_thanks(text):
+            _sessions[phone]["step"] = "WAITING_THANKS_RESPONSE"
+            _sessions[phone]["last_bot_at"] = _now()
+            return (
+                f"¡Con todo gusto, {first}! 😊\n\n"
+                "¿Deseas *finalizar* el chat o te gustaría *consultar otra materia*? 📚\n\n"
+                "_Responde *finalizar* para cerrar la sesión o *otra materia* para continuar._"
+            )
 
         # Intentar primero como número
         try:
@@ -173,7 +187,34 @@ class WahaChatbotService:
         )
         return analysis + footer
 
-    # ─── Paso 3: respuesta al mensaje de seguimiento por timeout ──────────────
+    # ─── Paso 3: respuesta a "gracias" tras un análisis ──────────────────────
+
+    def _handle_thanks_response(self, phone: str, text: str, state: dict) -> str:
+        t = text.lower().strip()
+        name = state.get("student_name", "")
+
+        _end_words = {"finalizar", "terminar", "no", "nada", "listo", "ok",
+                      "bye", "adios", "adiós", "chao", "hasta luego", "no gracias"}
+        _continue_words = {"otra materia", "otra", "si", "sí", "quiero",
+                           "consultar", "menu", "menú", "continuar", "más", "mas"}
+
+        if t in _end_words or any(t.startswith(w) for w in ("finali", "termin")):
+            _sessions.pop(phone, None)
+            return self._goodbye(name)
+
+        if t in _continue_words or any(t.startswith(w) for w in ("otra", "si ", "sí ", "consu")):
+            _sessions[phone]["step"] = "WAITING_SUBJECT"
+            _sessions[phone]["last_bot_at"] = _now()
+            return self._build_subject_menu(name, state.get("enrollments", []))
+
+        # Respuesta no reconocida → repetir la pregunta suavemente
+        first = name.split()[0] if name else "estudiante"
+        return (
+            f"No entendí bien tu respuesta, {first} 😅\n\n"
+            "¿Quieres *finalizar* el chat o *consultar otra materia*? 📚"
+        )
+
+    # ─── Paso 4: respuesta al mensaje de seguimiento por timeout ──────────────
 
     def _handle_followup_response(self, phone: str, text: str, state: dict) -> str:
         negative = {"no", "n", "gracias", "nada", "listo", "ok", "bye", "adios", "adiós"}
@@ -370,7 +411,7 @@ async def check_chatbot_timeouts() -> None:
             _sessions[phone]["step"] = "WAITING_FOLLOWUP"
             _sessions[phone]["last_bot_at"] = now
 
-        elif step == "WAITING_FOLLOWUP" and elapsed >= TIMEOUT_SECONDS:
+        elif step in ("WAITING_FOLLOWUP", "WAITING_THANKS_RESPONSE") and elapsed >= TIMEOUT_SECONDS:
             name = state.get("student_name", "")
             first = name.split()[0] if name else "estudiante"
             msg = (
@@ -402,6 +443,16 @@ async def _send_wa(phone: str, text: str) -> None:
 
 
 # ─── Utilidades puras ─────────────────────────────────────────────────────────
+
+_THANKS_PREFIXES = ("gracias", "muchas gracias", "mil gracias", "ok gracias",
+                    "grax", "grasias", "thank you", "thanks")
+
+
+def _is_thanks(text: str) -> bool:
+    """Devuelve True si el texto es una expresión de agradecimiento."""
+    t = text.lower().strip().rstrip("!").strip()
+    return any(t == p or t.startswith(p) for p in _THANKS_PREFIXES)
+
 
 def _to_float(value) -> Optional[float]:
     return float(value) if value is not None else None
