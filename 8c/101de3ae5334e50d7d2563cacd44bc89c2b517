@@ -1,0 +1,32 @@
+app/api/v1/endpoints/courses.py
+  s_b03b3a99345ebc::t_6cf155c3a5336b 8
+  s_b03b3a99345ebc::t_a66c7de4201c65 206-244
+app/application/services/professor_course_service.py
+  s_b03b3a99345ebc::t_7a63985753dcc8 204-218
+app/api/v1/endpoints/attendance.py
+  s_b03b3a99345ebc::t_7c3989caeaa8ff 461
+app/application/services/waha_chatbot_service.py
+  s_b03b3a99345ebc::t_d084c565193416 163-168
+app/infrastructure/repositories/course_repository.py
+  s_b03b3a99345ebc::t_b5bd8cfea02a8d 230-257
+app/api/v1/endpoints/notifications.py
+  s_b03b3a99345ebc::t_68346ba84b0e19 108-112,124-136,138,144
+  s_b03b3a99345ebc::t_2beaebfc553ce5 12
+  s_b03b3a99345ebc::t_acf401a8bcfacf 35
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "8c101de3ae5334e50d7d2563cacd44bc89c2b517",
+  "prompts": {},
+  "sessions": {
+    "s_b03b3a99345ebc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "379dbf03-6b10-4ee4-83b4-56a99a81b41a",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "daforonda_meli <davidlujan.foronda@mercadolibre.com.co>"
+    }
+  }
+}
