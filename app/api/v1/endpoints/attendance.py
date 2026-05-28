@@ -458,7 +458,7 @@ async def close_session(
         raise HTTPException(status_code=404, detail="Sesión no encontrada")
 
     session.is_active = False
-    session.closed_at = datetime.utcnow()
+    session.closed_at = datetime.now(timezone.utc)
     await db.commit()
 
     return {"ok": True, "message": "Sesión cerrada"}

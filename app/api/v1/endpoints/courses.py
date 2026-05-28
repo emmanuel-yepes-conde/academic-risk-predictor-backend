@@ -5,7 +5,7 @@ asignación profesor-sección y acceso a estudiantes.
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.schemas.course import (
@@ -203,3 +203,42 @@ async def list_course_students(
     service: ProfessorCourseService = Depends(_get_professor_course_service),
 ) -> list[UserRead]:
     return await service.list_course_students(course_id, professor_id)
+
+
+@router.get(
+    "/professors/{professor_id}/courses-summary",
+    response_model=dict[str, int],
+    status_code=200,
+    summary="Conteo de estudiantes por curso de un profesor (bulk)",
+    description=(
+        "Devuelve un mapa {course_id: student_count} para todos los cursos "
+        "asignados al profesor, en una sola query. Evita el N+1 del dashboard."
+    ),
+    tags=["Profesores"],
+)
+async def get_professor_courses_summary(
+    professor_id: UUID,
+    current_user: CurrentUser = Depends(get_current_user),
+    service: CourseService = Depends(_get_course_service),
+) -> dict[str, int]:
+    counts = await service._repo.get_student_counts_for_professor(professor_id)
+    return {str(k): v for k, v in counts.items()}
+
+
+@router.delete(
+    "/courses/{course_id}/students/{student_id}",
+    status_code=200,
+    summary="Eliminar estudiante de un curso",
+    description="Desvincula al estudiante del curso. Requiere rol PROFESSOR (propio curso) o ADMIN.",
+    tags=["Secciones"],
+)
+async def unenroll_student_from_course(
+    course_id: UUID,
+    student_id: UUID,
+    current_user: CurrentUser = Depends(require_roles(RoleEnum.PROFESSOR, RoleEnum.ADMIN)),
+    service: ProfessorCourseService = Depends(_get_professor_course_service),
+) -> dict:
+    removed = await service.unenroll_student(course_id, student_id, current_user)
+    if not removed:
+        raise HTTPException(status_code=404, detail="El estudiante no está inscrito en este curso")
+    return {"success": True, "message": "Estudiante eliminado del curso"}

@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, EmailStr, Field
 
 from app.services.email_service import send_risk_alert
-from app.services.notification_service import _send_email as _send_via_routing
+from app.services.notification_service import _send_email as _send_via_routing, _send_whatsapp
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +32,7 @@ class RiskAlertRequest(BaseModel):
 class PredictorReminderRequest(BaseModel):
     student_email: EmailStr = Field(..., description="Correo del estudiante destinatario")
     student_name: str = Field(..., min_length=1, description="Nombre del estudiante")
+    student_phone: str | None = Field(None, description="Teléfono WhatsApp del estudiante (opcional)")
 
 
 class NotificationResponse(BaseModel):
@@ -104,6 +105,11 @@ async def predictor_reminder_endpoint(body: PredictorReminderRequest) -> Notific
     """
     from app.services.acs_email_service import _reminder_html
     primer_nombre = body.student_name.split()[0] if body.student_name else "estudiante"
+    wa_body = (
+        f"Hola {primer_nombre} 👋, te recordamos revisar tu predicción de riesgo académico "
+        "esta semana y recibir consejos personalizados para este semestre.\n\n"
+        "📊 Ingresa a: https://academic-risk-predictor-frontend.vercel.app"
+    )
     sent = await _send_via_routing(
         email=body.student_email,
         name=body.student_name,
@@ -115,14 +121,27 @@ async def predictor_reminder_endpoint(body: PredictorReminderRequest) -> Notific
         html_content=_reminder_html(body.student_name),
     )
 
+    # Enviar también por WhatsApp si se proveyó teléfono
+    if body.student_phone:
+        try:
+            await _send_whatsapp(
+                phone=body.student_phone,
+                type="SYSTEM",
+                title="¿Has revisado tu riesgo académico esta semana?",
+                body=wa_body,
+            )
+            logger.info("[Recordatorio] WhatsApp enviado → %s", body.student_phone)
+        except Exception as exc:
+            logger.warning("[Recordatorio] WhatsApp falló → %s: %s", body.student_phone, exc)
+
     if sent:
-        logger.warning("[Recordatorio] ✅ Enviado → %s", body.student_email)
+        logger.info("[Recordatorio] ✅ Email enviado → %s", body.student_email)
         return NotificationResponse(
             success=True,
             message=f"Recordatorio enviado correctamente a {body.student_email}.",
         )
 
-    logger.warning("[Recordatorio] ❌ Falló → %s", body.student_email)
+    logger.warning("[Recordatorio] ❌ Email falló → %s", body.student_email)
     raise HTTPException(
         status_code=502,
         detail="No se pudo enviar el correo de recordatorio. Revisa los logs del servidor.",

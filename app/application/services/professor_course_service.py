@@ -201,6 +201,21 @@ class ProfessorCourseService:
         students = await self._course_repo.listar_estudiantes_inscritos(course_id)
         return [UserRead.model_validate(s) for s in students]
 
+    async def unenroll_student(
+        self,
+        course_id: UUID,
+        student_id: UUID,
+        current_user,
+    ) -> bool:
+        """
+        Elimina la inscripción de un estudiante en un curso.
+        Si el usuario es PROFESSOR, verifica que sea el asignado al curso (RB-04).
+        Retorna True si se eliminó, False si no existía la inscripción.
+        """
+        if current_user.role == RoleEnum.PROFESSOR:
+            await self.verify_professor_assigned_to_course(current_user.id, course_id)
+        return await self._course_repo.unenroll_student(course_id, student_id)
+
     async def write_grade(
         self,
         professor_id: UUID,
