@@ -227,5 +227,33 @@ class CourseRepository(ICourseRepository):
     async def listar_estudiantes_inscritos(self, course_id: UUID) -> list[User]:
         return await self.list_enrolled_students(course_id)
 
+    async def get_student_counts_for_professor(self, professor_id: UUID) -> dict[UUID, int]:
+        """
+        Devuelve {course_id: student_count} para todos los cursos del profesor
+        en una sola query — evita el N+1 del dashboard.
+        """
+        stmt = (
+            select(Enrollment.course_id, func.count(Enrollment.student_id).label("cnt"))
+            .join(Course, Course.id == Enrollment.course_id)
+            .where(Course.professor_id == professor_id)
+            .group_by(Enrollment.course_id)
+        )
+        result = await self._session.execute(stmt)
+        return {row.course_id: row.cnt for row in result}
+
+    async def unenroll_student(self, course_id: UUID, student_id: UUID) -> bool:
+        """
+        Elimina la inscripción de un estudiante en un curso.
+        Retorna True si existía y se eliminó, False si no existía.
+        """
+        from sqlalchemy import delete as sa_delete
+        stmt = (
+            sa_delete(Enrollment)
+            .where(Enrollment.course_id == course_id, Enrollment.student_id == student_id)
+        )
+        result = await self._session.execute(stmt)
+        await self._session.flush()
+        return result.rowcount > 0
+
     async def listar_por_programa(self, program_id: UUID) -> list[CourseRead]:
         return await self.list_by_program(program_id)

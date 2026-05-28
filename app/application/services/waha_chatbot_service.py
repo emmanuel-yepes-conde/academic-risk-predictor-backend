@@ -160,7 +160,12 @@ class WahaChatbotService:
                 "_Responde *finalizar* para cerrar la sesión o *otra materia* para continuar._"
             )
 
-        # Intentar primero como número
+        # Si el texto parece un número de documento (≥8 dígitos), redirigir al paso 1
+        if text.strip().isdigit() and len(text.strip()) >= 8:
+            _sessions.pop(phone, None)
+            return await self._handle_document(phone, text.strip())
+
+        # Intentar primero como número de materia
         try:
             selection = int(text)
             if selection < 1 or selection > len(enrollments):
