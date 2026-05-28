@@ -11,9 +11,6 @@ env/
 ENV/
 .venv
 
-# Modelos entrenados — se regeneran automáticamente al arrancar el servidor
-ml_models/*.joblib
-
 # IDEs
 .vscode/
 .idea/
