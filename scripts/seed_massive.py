@@ -75,7 +75,7 @@ from app.infrastructure.models.user import User
 RANDOM_SEED = 2024
 ADMIN_PASSWORD = "Admin123!"
 STUDENT_PASSWORD = "Demo123!"
-STUDENTS_PER_COHORT = 10_000  # 5 cohortes × 10 000 = 50 000
+STUDENTS_PER_COHORT = 200  # 5 cohortes × 200 = 1 000
 SECTIONS = ["A", "B", "C", "D"]
 BATCH_SIZE = 2_000
 SUB_BATCH_STUDENTS = 1_000  # flusha cada N estudiantes por cohorte
