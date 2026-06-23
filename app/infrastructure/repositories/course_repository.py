@@ -212,6 +212,34 @@ class CourseRepository(ICourseRepository):
 
         return users
 
+    async def delete(self, course_id: UUID) -> bool:
+        """
+        Elimina una sección por ID y registra un audit log DELETE.
+        Retorna True si existía y fue eliminada, False si no.
+        Gracias a ON DELETE CASCADE, PostgreSQL elimina en cascada:
+          course → enrollments → referrals
+                 → class_sessions → attendances
+        """
+        result = await self._session.execute(
+            select(Course).where(Course.id == course_id)
+        )
+        course = result.scalar_one_or_none()
+        if course is None:
+            return False
+        snapshot = {
+            k: str(v) if not isinstance(v, (str, int, float, bool, type(None))) else v
+            for k, v in course.model_dump().items()
+        }
+        await self._session.delete(course)
+        await self._session.flush()
+        await self._audit.register(AuditLogCreate(
+            table_name="courses",
+            operation=OperationEnum.DELETE,
+            record_id=course_id,
+            previous_data=snapshot,
+        ))
+        return True
+
     # --- Compatibilidad con código legacy ---
 
     async def obtener_por_id(self, id: UUID) -> CourseRead | None:

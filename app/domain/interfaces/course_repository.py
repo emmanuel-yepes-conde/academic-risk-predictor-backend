@@ -66,3 +66,6 @@ class ICourseRepository(ABC):
 
     @abstractmethod
     async def list_enrolled_students(self, course_id: UUID) -> list[User]: ...
+
+    @abstractmethod
+    async def delete(self, course_id: UUID) -> bool: ...

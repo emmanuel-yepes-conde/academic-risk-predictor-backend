@@ -58,6 +58,16 @@ class SubjectService:
             raise HTTPException(status_code=404, detail="Materia no encontrada")
         return SubjectRead.model_validate(subject)
 
+    async def delete_subject(self, subject_id: UUID) -> None:
+        """
+        Elimina una materia y todos sus recursos asociados en cascada:
+          secciones, inscripciones, notas, remisiones, sesiones de clase
+          y asistencias. Lanza HTTPException(404) si no existe.
+        """
+        deleted = await self._repo.delete(subject_id)
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Materia no encontrada")
+
     async def bulk_create_from_csv(
         self,
         file_content: bytes,

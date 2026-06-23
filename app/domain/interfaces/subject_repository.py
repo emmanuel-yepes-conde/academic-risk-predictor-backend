@@ -39,3 +39,6 @@ class ISubjectRepository(ABC):
     async def update_status(
         self, subject_id: UUID, status: CourseStatusEnum
     ) -> Subject | None: ...
+
+    @abstractmethod
+    async def delete(self, subject_id: UUID) -> bool: ...

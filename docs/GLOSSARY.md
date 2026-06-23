@@ -423,6 +423,7 @@ Base path: `/api/v1`
 | GET | `/subjects/{subject_id}` | Autenticado | Obtener por ID |
 | PATCH | `/subjects/{subject_id}` | ADMIN | Actualizar |
 | PATCH | `/subjects/{subject_id}/status` | ADMIN | Cambiar estado |
+| DELETE | `/subjects/{subject_id}` | ADMIN | Eliminar materia (con cascada) |
 | POST | `/subjects/bulk-create` | ADMIN | Carga masiva desde CSV |
 
 ### Cursos / Secciones (`/courses`)
@@ -435,6 +436,7 @@ Base path: `/api/v1`
 | PATCH | `/courses/{course_id}` | ADMIN | Actualizar |
 | PATCH | `/courses/{course_id}/evaluation-config` | PROFESSOR, ADMIN | Guardar distribución de evaluación de la sección |
 | PATCH | `/courses/{course_id}/status` | ADMIN | Cambiar estado |
+| DELETE | `/courses/{course_id}` | ADMIN | Eliminar sección (con cascada) |
 | POST | `/courses/{course_id}/professor` | ADMIN | Asignar profesor |
 | GET | `/courses/{course_id}/students` | ADMIN, PROFESSOR | Listar estudiantes matriculados |
 
@@ -492,6 +494,23 @@ Base path: `/api/v1`
 | **Seguimiento** | Actividades de seguimiento (tareas, quizzes) dentro de un corte. Campo `grades.first_cohort.seguimiento`. |
 | **Weight** | Porcentaje que pondera la nota de un componente sobre el total del corte o del curso. |
 | **SNIES** | Sistema Nacional de Información de la Educación Superior. El `snies_code` es el código oficial del programa ante el Ministerio de Educación de Colombia. |
+
+### Eliminación en cascada (cascade delete)
+
+Las FKs usan `ON DELETE CASCADE` para que eliminar una entidad raíz borre
+todos sus dependientes. La operación DELETE está restringida a **rol ADMIN**.
+Los usuarios (estudiantes y profesores) **no** se eliminan: solo desaparecen
+sus vínculos (matrículas, asignaciones, notas).
+
+| Eliminar | Borra en cascada | Migración |
+|---|---|---|
+| `Program` | → `Course` → `Enrollment`; `student_profiles.program_id` → NULL | 0013 |
+| `Subject` | → `Course` → `Enrollment` → `Referral`; → `ClassSession` → `Attendance` | 0014, 0028 |
+| `Course` | → `Enrollment` → `Referral`; → `ClassSession` → `Attendance` | 0013, 0018, 0024, 0028 |
+
+> La migración **0028** añade `fk_class_sessions_course_id`
+> (`class_sessions.course_id` → `courses.id`, CASCADE), cerrando el único
+> hueco que dejaba sesiones de clase huérfanas al borrar un curso.
 
 ---
 

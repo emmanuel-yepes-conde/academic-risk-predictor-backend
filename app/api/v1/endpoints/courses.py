@@ -143,6 +143,27 @@ async def update_course_status(
     return await service.update_course_status(course_id, body)
 
 
+@router.delete(
+    "/courses/{course_id}",
+    response_model=None,
+    status_code=204,
+    summary="Eliminar una sección",
+    description=(
+        "Elimina una sección y todos sus recursos asociados en cascada: "
+        "inscripciones, notas, remisiones, sesiones de clase y asistencias. "
+        "Los usuarios (estudiantes y profesor) se conservan; solo se eliminan "
+        "sus vínculos con la sección. Requiere rol ADMIN."
+    ),
+    tags=["Secciones"],
+)
+async def delete_course(
+    course_id: UUID,
+    current_user: CurrentUser = Depends(require_roles(RoleEnum.ADMIN)),
+    service: CourseService = Depends(_get_course_service),
+) -> None:
+    await service.delete_course(course_id)
+
+
 # ===========================================================================
 # Asignación profesor y acceso a estudiantes
 # ===========================================================================

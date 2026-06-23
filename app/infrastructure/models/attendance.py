@@ -20,7 +20,9 @@ class ClassSession(SQLModel, table=True):
     __tablename__ = "class_sessions"
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    course_id: uuid.UUID = Field(nullable=False, index=True)
+    course_id: uuid.UUID = Field(
+        foreign_key="courses.id", nullable=False, index=True
+    )
     professor_id: uuid.UUID = Field(nullable=False)
 
     # Ventana temporal del QR en segundos (el profesor elige: 30, 60, 120, 300…)

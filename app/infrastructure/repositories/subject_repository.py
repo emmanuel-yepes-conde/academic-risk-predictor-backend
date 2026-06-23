@@ -108,3 +108,28 @@ class SubjectRepository(ISubjectRepository):
             new_data={"status": status},
         ))
         return subject
+
+    async def delete(self, subject_id: UUID) -> bool:
+        """
+        Elimina una materia por ID y registra un audit log DELETE.
+        Retorna True si existía y fue eliminada, False si no.
+        Gracias a ON DELETE CASCADE, PostgreSQL elimina en cascada:
+          subject → courses → enrollments → referrals
+                            → class_sessions → attendances
+        """
+        subject = await self.get_by_id(subject_id)
+        if subject is None:
+            return False
+        snapshot = {
+            k: str(v) if not isinstance(v, (str, int, float, bool, type(None))) else v
+            for k, v in subject.model_dump().items()
+        }
+        await self._session.delete(subject)
+        await self._session.flush()
+        await self._audit.register(AuditLogCreate(
+            table_name="subjects",
+            operation=OperationEnum.DELETE,
+            record_id=subject_id,
+            previous_data=snapshot,
+        ))
+        return True

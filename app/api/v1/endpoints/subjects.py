@@ -89,6 +89,27 @@ async def update_subject_status(
     return await service.update_status(subject_id, data)
 
 
+@router.delete(
+    "/subjects/{subject_id}",
+    response_model=None,
+    status_code=204,
+    summary="Eliminar una materia",
+    description=(
+        "Elimina una materia y todos sus recursos asociados en cascada: "
+        "secciones, inscripciones, notas, remisiones, sesiones de clase y "
+        "asistencias. Los usuarios (estudiantes y profesores) se conservan; "
+        "solo se eliminan sus vínculos con la materia. Requiere rol ADMIN."
+    ),
+    tags=["Materias"],
+)
+async def delete_subject(
+    subject_id: UUID,
+    current_user: CurrentUser = Depends(require_roles(RoleEnum.ADMIN)),
+    service: SubjectService = Depends(_get_service),
+) -> None:
+    await service.delete_subject(subject_id)
+
+
 @router.post(
     "/subjects/bulk",
     response_model=SubjectBulkUploadResponse,

@@ -78,3 +78,13 @@ class CourseService:
         if course is None:
             raise HTTPException(status_code=404, detail="Sección no encontrada")
         return course
+
+    async def delete_course(self, course_id: UUID) -> None:
+        """
+        Elimina una sección y todos sus recursos asociados en cascada:
+          inscripciones, notas, remisiones, sesiones de clase y asistencias.
+        Lanza HTTPException(404) si no existe.
+        """
+        deleted = await self._repo.delete(course_id)
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Sección no encontrada")
