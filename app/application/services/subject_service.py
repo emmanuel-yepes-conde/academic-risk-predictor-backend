@@ -14,6 +14,7 @@ from app.application.schemas.subject import (
     SubjectStatusUpdate,
     SubjectUpdate,
 )
+from app.application.schemas.user import PaginatedResponse
 from app.domain.enums import CourseStatusEnum
 from app.domain.interfaces.subject_repository import ISubjectRepository
 
@@ -38,9 +39,17 @@ class SubjectService:
             raise HTTPException(status_code=404, detail="Materia no encontrada")
         return SubjectRead.model_validate(subject)
 
-    async def list_by_program(self, program_id: UUID) -> list[SubjectRead]:
-        subjects = await self._repo.list_by_program(program_id)
-        return [SubjectRead.model_validate(s) for s in subjects]
+    async def list_by_program(
+        self, program_id: UUID, skip: int = 0, limit: int = 50
+    ) -> PaginatedResponse[SubjectRead]:
+        subjects = await self._repo.list_by_program(program_id, skip=skip, limit=limit)
+        total = await self._repo.count_by_program(program_id)
+        return PaginatedResponse(
+            data=[SubjectRead.model_validate(s) for s in subjects],
+            total=total,
+            skip=skip,
+            limit=limit,
+        )
 
     async def update_subject(
         self, subject_id: UUID, data: SubjectUpdate

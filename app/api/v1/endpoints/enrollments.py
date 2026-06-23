@@ -26,6 +26,7 @@ from app.application.schemas.enrollment import (
     GradesUpdate,
     RiskFromEnrollmentRequest,
 )
+from app.application.schemas.user import PaginatedResponse
 from app.application.services.enrollment_service import EnrollmentService
 from app.application.services.grade_service import (
     GradeService,
@@ -207,7 +208,7 @@ async def get_student_profile(
 
 @router.get(
     "/students/{student_id}/enrollments",
-    response_model=list[EnrollmentRead],
+    response_model=PaginatedResponse[EnrollmentRead],
     status_code=200,
     summary="Listar inscripciones de un estudiante",
     description=(
@@ -226,10 +227,14 @@ async def list_student_enrollments(
     status: EnrollmentStatusEnum | None = Query(
         default=None, description="Filtrar por estado de inscripción"
     ),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
     current_user: CurrentUser = Depends(require_student_self_or_roles),
     service: EnrollmentService = Depends(_get_enrollment_service),
-) -> list[EnrollmentRead]:
-    return await service.list_student_enrollments(student_id, current_user, status)
+) -> PaginatedResponse[EnrollmentRead]:
+    return await service.list_student_enrollments(
+        student_id, current_user, status, skip=skip, limit=limit
+    )
 
 
 # ===========================================================================

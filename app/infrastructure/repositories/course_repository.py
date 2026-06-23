@@ -88,17 +88,46 @@ class CourseRepository(ICourseRepository):
         )
         return [_to_read(c, s) for c, s in result.all()]
 
-    async def list_by_professor(self, professor_id: UUID) -> list[CourseRead]:
+    async def list_by_professor(
+        self, professor_id: UUID, skip: int = 0, limit: int = 50
+    ) -> list[CourseRead]:
         result = await self._session.execute(
-            _base_joined_stmt().where(Course.professor_id == professor_id)
+            _base_joined_stmt()
+            .where(Course.professor_id == professor_id)
+            .offset(skip)
+            .limit(limit)
         )
         return [_to_read(c, s) for c, s in result.all()]
 
-    async def list_by_program(self, program_id: UUID) -> list[CourseRead]:
+    async def count_by_professor(self, professor_id: UUID) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(Course)
+            .where(Course.professor_id == professor_id)
+        )
+        result = await self._session.execute(stmt)
+        return result.scalar_one()
+
+    async def list_by_program(
+        self, program_id: UUID, skip: int = 0, limit: int = 50
+    ) -> list[CourseRead]:
         result = await self._session.execute(
-            _base_joined_stmt().where(Subject.program_id == program_id)
+            _base_joined_stmt()
+            .where(Subject.program_id == program_id)
+            .offset(skip)
+            .limit(limit)
         )
         return [_to_read(c, s) for c, s in result.all()]
+
+    async def count_by_program(self, program_id: UUID) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(Course)
+            .join(Subject, Course.subject_id == Subject.id)
+            .where(Subject.program_id == program_id)
+        )
+        result = await self._session.execute(stmt)
+        return result.scalar_one()
 
     async def list_all(
         self,
@@ -190,12 +219,25 @@ class CourseRepository(ICourseRepository):
         await self._session.flush()
         return await self.get_by_id(course_id)
 
-    async def list_enrolled_students(self, course_id: UUID) -> list[User]:
+    async def count_enrolled_students(self, course_id: UUID) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(Enrollment)
+            .where(Enrollment.course_id == course_id)
+        )
+        result = await self._session.execute(stmt)
+        return result.scalar_one()
+
+    async def list_enrolled_students(
+        self, course_id: UUID, skip: int = 0, limit: int = 50
+    ) -> list[User]:
         from sqlalchemy.orm import selectinload  # lazy import para evitar ciclos
         stmt = (
             select(User)
             .join(Enrollment, Enrollment.student_id == User.id)
             .where(Enrollment.course_id == course_id)
+            .offset(skip)
+            .limit(limit)
         )
         result = await self._session.execute(stmt)
         users = list(result.scalars().all())
@@ -249,11 +291,15 @@ class CourseRepository(ICourseRepository):
         payload = data.model_dump() if hasattr(data, "model_dump") else dict(data)
         return await self.create(payload)
 
-    async def listar_por_docente(self, docente_id: UUID) -> list[CourseRead]:
-        return await self.list_by_professor(docente_id)
+    async def listar_por_docente(
+        self, docente_id: UUID, skip: int = 0, limit: int = 50
+    ) -> list[CourseRead]:
+        return await self.list_by_professor(docente_id, skip=skip, limit=limit)
 
-    async def listar_estudiantes_inscritos(self, course_id: UUID) -> list[User]:
-        return await self.list_enrolled_students(course_id)
+    async def listar_estudiantes_inscritos(
+        self, course_id: UUID, skip: int = 0, limit: int = 50
+    ) -> list[User]:
+        return await self.list_enrolled_students(course_id, skip=skip, limit=limit)
 
     async def get_student_counts_for_professor(self, professor_id: UUID) -> dict[UUID, int]:
         """

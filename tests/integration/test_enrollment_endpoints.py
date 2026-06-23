@@ -19,6 +19,7 @@ import jwt
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from app.application.schemas.user import PaginatedResponse
 from app.core.config import settings
 from app.domain.enums import CourseStatusEnum, EnrollmentStatusEnum, RoleEnum
 from app.infrastructure.models.enrollment import Enrollment
@@ -593,10 +594,13 @@ async def test_get_student_enrollments_returns_200(client: AsyncClient):
     ) as mock_list:
         from app.application.schemas.enrollment import EnrollmentRead
 
-        mock_list.return_value = [
-            EnrollmentRead.model_validate(enrollment1),
-            EnrollmentRead.model_validate(enrollment2),
-        ]
+        mock_list.return_value = PaginatedResponse(
+            data=[
+                EnrollmentRead.model_validate(enrollment1),
+                EnrollmentRead.model_validate(enrollment2),
+            ],
+            total=2, skip=0, limit=50,
+        )
         response = await client.get(
             f"/api/v1/students/{student_id}/enrollments",
             headers={"Authorization": f"Bearer {token}"},
@@ -604,9 +608,9 @@ async def test_get_student_enrollments_returns_200(client: AsyncClient):
 
     assert response.status_code == 200
     body = response.json()
-    assert len(body) == 2
-    assert body[0]["student_id"] == str(student_id)
-    assert body[1]["student_id"] == str(student_id)
+    assert len(body["data"]) == 2
+    assert body["data"][0]["student_id"] == str(student_id)
+    assert body["data"][1]["student_id"] == str(student_id)
 
 
 # ===========================================================================
@@ -623,7 +627,7 @@ async def test_get_student_enrollments_empty_returns_200(client: AsyncClient):
         "app.api.v1.endpoints.enrollments.EnrollmentService.list_student_enrollments",
         new_callable=AsyncMock,
     ) as mock_list:
-        mock_list.return_value = []
+        mock_list.return_value = PaginatedResponse(data=[], total=0, skip=0, limit=50)
         response = await client.get(
             f"/api/v1/students/{student_id}/enrollments",
             headers={"Authorization": f"Bearer {token}"},
@@ -631,7 +635,7 @@ async def test_get_student_enrollments_empty_returns_200(client: AsyncClient):
 
     assert response.status_code == 200
     body = response.json()
-    assert body == []
+    assert body["data"] == []
 
 
 # ===========================================================================
@@ -651,7 +655,9 @@ async def test_get_student_enrollments_professor_returns_200(client: AsyncClient
     ) as mock_list:
         from app.application.schemas.enrollment import EnrollmentRead
 
-        mock_list.return_value = [EnrollmentRead.model_validate(enrollment)]
+        mock_list.return_value = PaginatedResponse(
+            data=[EnrollmentRead.model_validate(enrollment)], total=1, skip=0, limit=50
+        )
         response = await client.get(
             f"/api/v1/students/{student_id}/enrollments",
             headers={"Authorization": f"Bearer {token}"},
@@ -659,7 +665,7 @@ async def test_get_student_enrollments_professor_returns_200(client: AsyncClient
 
     assert response.status_code == 200
     body = response.json()
-    assert len(body) == 1
+    assert len(body["data"]) == 1
 
 
 # ===========================================================================

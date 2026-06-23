@@ -31,10 +31,16 @@ class TestICourseRepositoryInterface:
             async def list_by_subject(self, subject_id):
                 ...
 
-            async def list_by_professor(self, professor_id):
+            async def list_by_professor(self, professor_id, skip=0, limit=50):
                 ...
 
-            async def list_by_program(self, program_id):
+            async def count_by_professor(self, professor_id):
+                ...
+
+            async def list_by_program(self, program_id, skip=0, limit=50):
+                ...
+
+            async def count_by_program(self, program_id):
                 ...
 
             async def update(self, course_id, data):
@@ -55,7 +61,13 @@ class TestICourseRepositoryInterface:
             async def save_evaluation_config(self, course_id, config):
                 ...
 
-            async def list_enrolled_students(self, course_id):
+            async def list_enrolled_students(self, course_id, skip=0, limit=50):
+                ...
+
+            async def count_enrolled_students(self, course_id):
+                ...
+
+            async def delete(self, course_id):
                 ...
 
         repo = ConcreteCourseRepo()
@@ -86,13 +98,17 @@ class TestICourseRepositoryInterface:
             "get_by_code",
             "list_by_subject",
             "list_by_professor",
+            "count_by_professor",
             "list_by_program",
+            "count_by_program",
             "list_all",
             "count_all",
             "update",
             "update_status",
             "save_evaluation_config",
             "list_enrolled_students",
+            "count_enrolled_students",
+            "delete",
         }
         assert abstract_methods == expected
 

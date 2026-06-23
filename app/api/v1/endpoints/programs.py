@@ -12,6 +12,7 @@ from app.api.v1.dependencies.auth import CurrentUser, get_current_user, require_
 from app.application.schemas.course import CourseRead
 from app.application.schemas.program import ProgramCreate, ProgramRead, ProgramUpdate
 from app.application.schemas.subject import SubjectRead
+from app.application.schemas.user import PaginatedResponse
 from app.application.services.program_service import ProgramService
 from app.application.services.subject_service import SubjectService
 from app.domain.enums import RoleEnum
@@ -34,18 +35,18 @@ def _get_service(session: AsyncSession = Depends(get_session)) -> ProgramService
 
 @router.get(
     "/programs",
-    response_model=list[ProgramRead],
+    response_model=PaginatedResponse[ProgramRead],
     status_code=200,
     summary="Listar todos los programas académicos",
-    description="Retorna la lista de programas académicos. Accesible para cualquier usuario autenticado.",
+    description="Retorna programas académicos paginados (50 por página por defecto). Accesible para cualquier usuario autenticado.",
     tags=["Programas"],
 )
 async def list_programs(
     skip: int = Query(default=0, ge=0),
-    limit: int = Query(default=200, ge=1, le=500),
+    limit: int = Query(default=50, ge=1, le=100),
     current_user: CurrentUser = Depends(get_current_user),
     service: ProgramService = Depends(_get_service),
-) -> list[ProgramRead]:
+) -> PaginatedResponse[ProgramRead]:
     return await service.list_programs(skip, limit)
 
 
@@ -92,28 +93,6 @@ async def update_program(
     service: ProgramService = Depends(_get_service),
 ) -> ProgramRead:
     return await service.update_program(program_id, body)
-
-
-# ---------------------------------------------------------------------------
-# GET /programs — any authenticated user (list all)
-# ---------------------------------------------------------------------------
-
-
-@router.get(
-    "/programs",
-    response_model=list[ProgramRead],
-    status_code=200,
-    summary="Listar todos los programas académicos",
-    description="Retorna la lista de todos los programas. Accesible para cualquier usuario autenticado.",
-    tags=["Programas"],
-)
-async def list_programs(
-    skip: int = 0,
-    limit: int = 100,
-    current_user: CurrentUser = Depends(get_current_user),
-    service: ProgramService = Depends(_get_service),
-) -> list[ProgramRead]:
-    return await service.list_programs(skip=skip, limit=limit)
 
 
 # ---------------------------------------------------------------------------
@@ -172,21 +151,25 @@ async def delete_program(
 
 @router.get(
     "/programs/{program_id}/subjects",
-    response_model=list[SubjectRead],
+    response_model=PaginatedResponse[SubjectRead],
     status_code=200,
     summary="Listar materias de un programa",
-    description="Retorna las materias (definiciones) del programa. 404 si no existe.",
+    description="Retorna las materias (definiciones) del programa, paginadas (50 por página). 404 si no existe.",
     tags=["Programas"],
 )
 async def list_subjects_by_program(
     program_id: UUID,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=100),
     current_user: CurrentUser = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
-) -> list[SubjectRead]:
+) -> PaginatedResponse[SubjectRead]:
     program = await ProgramRepository(session).get_by_id(program_id)
     if program is None:
         raise HTTPException(status_code=404, detail="Programa no encontrado")
-    return await SubjectService(SubjectRepository(session)).list_by_program(program_id)
+    return await SubjectService(SubjectRepository(session)).list_by_program(
+        program_id, skip=skip, limit=limit
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -196,20 +179,26 @@ async def list_subjects_by_program(
 
 @router.get(
     "/programs/{program_id}/courses",
-    response_model=list[CourseRead],
+    response_model=PaginatedResponse[CourseRead],
     status_code=200,
     summary="Listar secciones de un programa",
     description=(
-        "Retorna todas las secciones (grupos) de todas las materias del programa. "
-        "Incluye datos de materia denormalizados. 404 si el programa no existe."
+        "Retorna las secciones (grupos) de todas las materias del programa, "
+        "paginadas (50 por página). Incluye datos de materia denormalizados. "
+        "404 si el programa no existe."
     ),
     tags=["Programas"],
 )
 async def list_courses_by_program(
     program_id: UUID,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=100),
     session: AsyncSession = Depends(get_session),
-) -> list[CourseRead]:
+) -> PaginatedResponse[CourseRead]:
     program = await ProgramRepository(session).get_by_id(program_id)
     if program is None:
         raise HTTPException(status_code=404, detail="Programa no encontrado")
-    return await CourseRepository(session).list_by_program(program_id)
+    repo = CourseRepository(session)
+    items = await repo.list_by_program(program_id, skip=skip, limit=limit)
+    total = await repo.count_by_program(program_id)
+    return PaginatedResponse(data=items, total=total, skip=skip, limit=limit)

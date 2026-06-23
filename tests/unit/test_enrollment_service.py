@@ -516,16 +516,18 @@ class TestListStudentEnrollmentsAdmin:
             enrollment_id=uuid.uuid4(), course_id=uuid.uuid4()
         )]
         repo.list_by_student.return_value = enrollments
+        repo.count_by_student.return_value = 2
 
         session = AsyncMock()
         admin_user = _make_current_user(role=RoleEnum.ADMIN)
         service = EnrollmentService(repo, session)
         result = await service.list_student_enrollments(_STUDENT_ID, admin_user)
 
-        assert len(result) == 2
-        assert all(isinstance(r, EnrollmentRead) for r in result)
+        assert result.total == 2
+        assert len(result.data) == 2
+        assert all(isinstance(r, EnrollmentRead) for r in result.data)
         repo.list_by_student.assert_awaited_once_with(
-            _STUDENT_ID, status=EnrollmentStatusEnum.ACTIVE
+            _STUDENT_ID, status=EnrollmentStatusEnum.ACTIVE, skip=0, limit=50
         )
         repo.list_by_student_filtered_by_professor.assert_not_awaited()
 
@@ -542,6 +544,7 @@ class TestListStudentEnrollmentsProfessor:
         repo = _make_repo()
         enrollment = _make_enrollment()
         repo.list_by_student_filtered_by_professor.return_value = [enrollment]
+        repo.count_by_student_filtered_by_professor.return_value = 1
 
         session = AsyncMock()
         professor_user = _make_current_user(
@@ -550,10 +553,10 @@ class TestListStudentEnrollmentsProfessor:
         service = EnrollmentService(repo, session)
         result = await service.list_student_enrollments(_STUDENT_ID, professor_user)
 
-        assert len(result) == 1
-        assert isinstance(result[0], EnrollmentRead)
+        assert len(result.data) == 1
+        assert isinstance(result.data[0], EnrollmentRead)
         repo.list_by_student_filtered_by_professor.assert_awaited_once_with(
-            _STUDENT_ID, _PROFESSOR_ID, status=None
+            _STUDENT_ID, _PROFESSOR_ID, status=None, skip=0, limit=50
         )
         repo.list_by_student.assert_not_awaited()
 
@@ -562,6 +565,7 @@ class TestListStudentEnrollmentsProfessor:
         """PROFESSOR with no matching courses must receive empty list."""
         repo = _make_repo()
         repo.list_by_student_filtered_by_professor.return_value = []
+        repo.count_by_student_filtered_by_professor.return_value = 0
 
         session = AsyncMock()
         professor_user = _make_current_user(
@@ -570,9 +574,9 @@ class TestListStudentEnrollmentsProfessor:
         service = EnrollmentService(repo, session)
         result = await service.list_student_enrollments(_STUDENT_ID, professor_user)
 
-        assert result == []
+        assert result.data == []
         repo.list_by_student_filtered_by_professor.assert_awaited_once_with(
-            _STUDENT_ID, _PROFESSOR_ID, status=None
+            _STUDENT_ID, _PROFESSOR_ID, status=None, skip=0, limit=50
         )
 
 
@@ -600,6 +604,7 @@ class TestListStudentEnrollmentsStudent:
             ),
         ]
         repo.list_by_student.return_value = enrollments
+        repo.count_by_student.return_value = 3
 
         session = AsyncMock()
         student_user = _make_current_user(
@@ -608,11 +613,11 @@ class TestListStudentEnrollmentsStudent:
         service = EnrollmentService(repo, session)
         result = await service.list_student_enrollments(_STUDENT_ID, student_user)
 
-        assert len(result) == 3
-        assert all(isinstance(r, EnrollmentRead) for r in result)
+        assert len(result.data) == 3
+        assert all(isinstance(r, EnrollmentRead) for r in result.data)
         # status=None means no filter — return all statuses
         repo.list_by_student.assert_awaited_once_with(
-            _STUDENT_ID, status=None
+            _STUDENT_ID, status=None, skip=0, limit=50
         )
         repo.list_by_student_filtered_by_professor.assert_not_awaited()
 
@@ -622,6 +627,7 @@ class TestListStudentEnrollmentsStudent:
         repo = _make_repo()
         completed = _make_enrollment(status=EnrollmentStatusEnum.COMPLETED)
         repo.list_by_student.return_value = [completed]
+        repo.count_by_student.return_value = 1
 
         session = AsyncMock()
         student_user = _make_current_user(
@@ -632,10 +638,10 @@ class TestListStudentEnrollmentsStudent:
             _STUDENT_ID, student_user, status=EnrollmentStatusEnum.COMPLETED
         )
 
-        assert len(result) == 1
-        assert result[0].status == EnrollmentStatusEnum.COMPLETED
+        assert len(result.data) == 1
+        assert result.data[0].status == EnrollmentStatusEnum.COMPLETED
         repo.list_by_student.assert_awaited_once_with(
-            _STUDENT_ID, status=EnrollmentStatusEnum.COMPLETED
+            _STUDENT_ID, status=EnrollmentStatusEnum.COMPLETED, skip=0, limit=50
         )
 
 
@@ -651,15 +657,16 @@ class TestListStudentEnrollmentsAdminDefaultActive:
         repo = _make_repo()
         enrollments = [_make_enrollment(status=EnrollmentStatusEnum.ACTIVE)]
         repo.list_by_student.return_value = enrollments
+        repo.count_by_student.return_value = 1
 
         session = AsyncMock()
         admin_user = _make_current_user(role=RoleEnum.ADMIN)
         service = EnrollmentService(repo, session)
         result = await service.list_student_enrollments(_STUDENT_ID, admin_user)
 
-        assert len(result) == 1
+        assert len(result.data) == 1
         repo.list_by_student.assert_awaited_once_with(
-            _STUDENT_ID, status=EnrollmentStatusEnum.ACTIVE
+            _STUDENT_ID, status=EnrollmentStatusEnum.ACTIVE, skip=0, limit=50
         )
 
     @pytest.mark.anyio
@@ -668,6 +675,7 @@ class TestListStudentEnrollmentsAdminDefaultActive:
         repo = _make_repo()
         completed = _make_enrollment(status=EnrollmentStatusEnum.COMPLETED)
         repo.list_by_student.return_value = [completed]
+        repo.count_by_student.return_value = 1
 
         session = AsyncMock()
         admin_user = _make_current_user(role=RoleEnum.ADMIN)
@@ -676,10 +684,10 @@ class TestListStudentEnrollmentsAdminDefaultActive:
             _STUDENT_ID, admin_user, status=EnrollmentStatusEnum.COMPLETED
         )
 
-        assert len(result) == 1
-        assert result[0].status == EnrollmentStatusEnum.COMPLETED
+        assert len(result.data) == 1
+        assert result.data[0].status == EnrollmentStatusEnum.COMPLETED
         repo.list_by_student.assert_awaited_once_with(
-            _STUDENT_ID, status=EnrollmentStatusEnum.COMPLETED
+            _STUDENT_ID, status=EnrollmentStatusEnum.COMPLETED, skip=0, limit=50
         )
 
 
@@ -695,6 +703,7 @@ class TestListStudentEnrollmentsProfessorWithStatus:
         repo = _make_repo()
         completed = _make_enrollment(status=EnrollmentStatusEnum.COMPLETED)
         repo.list_by_student_filtered_by_professor.return_value = [completed]
+        repo.count_by_student_filtered_by_professor.return_value = 1
 
         session = AsyncMock()
         professor_user = _make_current_user(
@@ -705,10 +714,10 @@ class TestListStudentEnrollmentsProfessorWithStatus:
             _STUDENT_ID, professor_user, status=EnrollmentStatusEnum.COMPLETED
         )
 
-        assert len(result) == 1
-        assert result[0].status == EnrollmentStatusEnum.COMPLETED
+        assert len(result.data) == 1
+        assert result.data[0].status == EnrollmentStatusEnum.COMPLETED
         repo.list_by_student_filtered_by_professor.assert_awaited_once_with(
-            _STUDENT_ID, _PROFESSOR_ID, status=EnrollmentStatusEnum.COMPLETED
+            _STUDENT_ID, _PROFESSOR_ID, status=EnrollmentStatusEnum.COMPLETED, skip=0, limit=50
         )
         repo.list_by_student.assert_not_awaited()
 

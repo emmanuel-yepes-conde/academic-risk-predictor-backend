@@ -102,12 +102,18 @@ def _build_service(
     service._course_repo = AsyncMock()
     service._course_repo.obtener_por_id = AsyncMock(side_effect=mock_obtener_por_id)
 
-    # Mock listar_estudiantes_inscritos on the course repo
-    async def mock_listar_estudiantes(course_id):
-        return students_by_course.get(course_id, [])
+    # Mock list_enrolled_students / count_enrolled_students on the course repo
+    async def mock_list_enrolled(course_id, skip=0, limit=50):
+        return students_by_course.get(course_id, [])[skip:skip + limit]
 
-    service._course_repo.listar_estudiantes_inscritos = AsyncMock(
-        side_effect=mock_listar_estudiantes
+    async def mock_count_enrolled(course_id):
+        return len(students_by_course.get(course_id, []))
+
+    service._course_repo.list_enrolled_students = AsyncMock(
+        side_effect=mock_list_enrolled
+    )
+    service._course_repo.count_enrolled_students = AsyncMock(
+        side_effect=mock_count_enrolled
     )
 
     return service
@@ -173,15 +179,15 @@ async def test_rb04_professor_access_control(
     for cid in assigned_course_ids:
         result = await service.list_course_students(cid, professor_id)
 
-        assert isinstance(result, list), (
+        assert isinstance(result.data, list), (
             f"Expected list for assigned course {cid}, "
-            f"got {type(result).__name__}"
+            f"got {type(result.data).__name__}"
         )
-        assert len(result) == students_per_course, (
+        assert len(result.data) == students_per_course, (
             f"Expected {students_per_course} students for course {cid}, "
-            f"got {len(result)}"
+            f"got {len(result.data)}"
         )
-        for student_read in result:
+        for student_read in result.data:
             assert isinstance(student_read, UserRead), (
                 f"Expected UserRead, got {type(student_read).__name__}"
             )

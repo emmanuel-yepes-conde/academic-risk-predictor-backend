@@ -383,7 +383,7 @@ async def test_list_professor_courses_returns_course_read_with_professor_id():
     session.execute = AsyncMock(side_effect=_execute)
 
     service = ProfessorCourseService(session)
-    courses = await service.list_professor_courses(professor.id)
+    courses = (await service.list_professor_courses(professor.id)).data
 
     assert len(courses) == 2
     assert all(isinstance(c, CourseRead) for c in courses)
@@ -424,7 +424,7 @@ async def test_list_course_students_assigned_professor_succeeds():
     session.execute = AsyncMock(side_effect=_execute)
 
     service = ProfessorCourseService(session)
-    students = await service.list_course_students(course.id, professor.id)
+    students = (await service.list_course_students(course.id, professor.id)).data
 
     assert len(students) == 2
     assert all(isinstance(s, UserRead) for s in students)

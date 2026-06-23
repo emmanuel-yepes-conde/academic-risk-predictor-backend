@@ -17,6 +17,7 @@ import jwt
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from app.application.schemas.user import PaginatedResponse
 from app.core.config import settings
 from app.domain.enums import EnrollmentStatusEnum, RoleEnum
 from app.infrastructure.models.enrollment import Enrollment
@@ -118,7 +119,9 @@ async def test_get_student_enrollments_student_self_access_returns_200(client: A
     ) as mock_list:
         from app.application.schemas.enrollment import EnrollmentRead
 
-        mock_list.return_value = [EnrollmentRead.model_validate(enrollment)]
+        mock_list.return_value = PaginatedResponse(
+            data=[EnrollmentRead.model_validate(enrollment)], total=1, skip=0, limit=50
+        )
         response = await client.get(
             f"/api/v1/students/{student_id}/enrollments",
             headers={"Authorization": f"Bearer {token}"},
@@ -126,8 +129,8 @@ async def test_get_student_enrollments_student_self_access_returns_200(client: A
 
     assert response.status_code == 200
     body = response.json()
-    assert len(body) == 1
-    assert body[0]["student_id"] == str(student_id)
+    assert len(body["data"]) == 1
+    assert body["data"][0]["student_id"] == str(student_id)
 
 
 # ===========================================================================
@@ -167,7 +170,9 @@ async def test_get_student_enrollments_admin_returns_200(client: AsyncClient):
     ) as mock_list:
         from app.application.schemas.enrollment import EnrollmentRead
 
-        mock_list.return_value = [EnrollmentRead.model_validate(enrollment)]
+        mock_list.return_value = PaginatedResponse(
+            data=[EnrollmentRead.model_validate(enrollment)], total=1, skip=0, limit=50
+        )
         response = await client.get(
             f"/api/v1/students/{student_id}/enrollments",
             headers={"Authorization": f"Bearer {token}"},
@@ -175,7 +180,7 @@ async def test_get_student_enrollments_admin_returns_200(client: AsyncClient):
 
     assert response.status_code == 200
     body = response.json()
-    assert len(body) == 1
+    assert len(body["data"]) == 1
 
 
 # ===========================================================================
@@ -212,7 +217,9 @@ async def test_get_student_enrollments_professor_rb04_returns_200(client: AsyncC
     ) as mock_list:
         from app.application.schemas.enrollment import EnrollmentRead
 
-        mock_list.return_value = [EnrollmentRead.model_validate(enrollment)]
+        mock_list.return_value = PaginatedResponse(
+            data=[EnrollmentRead.model_validate(enrollment)], total=1, skip=0, limit=50
+        )
         response = await client.get(
             f"/api/v1/students/{student_id}/enrollments",
             headers={"Authorization": f"Bearer {token}"},
@@ -220,7 +227,7 @@ async def test_get_student_enrollments_professor_rb04_returns_200(client: AsyncC
 
     assert response.status_code == 200
     body = response.json()
-    assert len(body) == 1
+    assert len(body["data"]) == 1
 
 
 # ===========================================================================
@@ -240,7 +247,9 @@ async def test_get_student_enrollments_filter_completed(client: AsyncClient):
     ) as mock_list:
         from app.application.schemas.enrollment import EnrollmentRead
 
-        mock_list.return_value = [EnrollmentRead.model_validate(enrollment)]
+        mock_list.return_value = PaginatedResponse(
+            data=[EnrollmentRead.model_validate(enrollment)], total=1, skip=0, limit=50
+        )
         response = await client.get(
             f"/api/v1/students/{student_id}/enrollments?status=COMPLETED",
             headers={"Authorization": f"Bearer {token}"},
@@ -248,8 +257,8 @@ async def test_get_student_enrollments_filter_completed(client: AsyncClient):
 
     assert response.status_code == 200
     body = response.json()
-    assert len(body) == 1
-    assert body[0]["status"] == "COMPLETED"
+    assert len(body["data"]) == 1
+    assert body["data"][0]["status"] == "COMPLETED"
     # Verify the service was called with the correct status filter
     mock_list.assert_called_once()
     call_args = mock_list.call_args
@@ -273,7 +282,9 @@ async def test_get_student_enrollments_filter_pending(client: AsyncClient):
     ) as mock_list:
         from app.application.schemas.enrollment import EnrollmentRead
 
-        mock_list.return_value = [EnrollmentRead.model_validate(enrollment)]
+        mock_list.return_value = PaginatedResponse(
+            data=[EnrollmentRead.model_validate(enrollment)], total=1, skip=0, limit=50
+        )
         response = await client.get(
             f"/api/v1/students/{student_id}/enrollments?status=PENDING",
             headers={"Authorization": f"Bearer {token}"},
@@ -281,8 +292,8 @@ async def test_get_student_enrollments_filter_pending(client: AsyncClient):
 
     assert response.status_code == 200
     body = response.json()
-    assert len(body) == 1
-    assert body[0]["status"] == "PENDING"
+    assert len(body["data"]) == 1
+    assert body["data"][0]["status"] == "PENDING"
     mock_list.assert_called_once()
     call_args = mock_list.call_args
     assert call_args[0][2] == EnrollmentStatusEnum.PENDING

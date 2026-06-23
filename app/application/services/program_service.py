@@ -8,6 +8,7 @@ from uuid import UUID
 from fastapi import HTTPException
 
 from app.application.schemas.program import ProgramCreate, ProgramRead, ProgramUpdate
+from app.application.schemas.user import PaginatedResponse
 from app.domain.interfaces.program_repository import IProgramRepository
 
 
@@ -68,10 +69,18 @@ class ProgramService:
 
         return ProgramRead.model_validate(program)
 
-    async def list_programs(self, skip: int = 0, limit: int = 100) -> list[ProgramRead]:
-        """Lista todos los programas académicos."""
+    async def list_programs(
+        self, skip: int = 0, limit: int = 50
+    ) -> PaginatedResponse[ProgramRead]:
+        """Lista programas académicos con paginación (50 por página por defecto)."""
         programs = await self._repo.list_all(skip=skip, limit=limit)
-        return [ProgramRead.model_validate(p) for p in programs]
+        total = await self._repo.count_all()
+        return PaginatedResponse(
+            data=[ProgramRead.model_validate(p) for p in programs],
+            total=total,
+            skip=skip,
+            limit=limit,
+        )
 
     async def get_program(self, program_id: UUID) -> ProgramRead:
         """

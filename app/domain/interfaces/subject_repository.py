@@ -22,7 +22,12 @@ class ISubjectRepository(ABC):
     async def get_by_code(self, code: str, program_id: UUID) -> Subject | None: ...
 
     @abstractmethod
-    async def list_by_program(self, program_id: UUID) -> list[Subject]: ...
+    async def list_by_program(
+        self, program_id: UUID, skip: int = 0, limit: int = 50
+    ) -> list[Subject]: ...
+
+    @abstractmethod
+    async def count_by_program(self, program_id: UUID) -> int: ...
 
     @abstractmethod
     async def list_all(

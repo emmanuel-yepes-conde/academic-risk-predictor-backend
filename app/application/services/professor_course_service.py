@@ -12,7 +12,7 @@ from fastapi import HTTPException
 
 from app.application.schemas.audit_log import AuditLogCreate
 from app.application.schemas.professor_course import ProfessorAssignmentRead
-from app.application.schemas.user import UserRead
+from app.application.schemas.user import PaginatedResponse, UserRead
 from app.application.schemas.course import CourseRead
 from app.domain.enums import OperationEnum, RoleEnum
 
@@ -156,14 +156,24 @@ class ProfessorCourseService:
             )
         return UserRead.model_validate(professor)
 
-    async def list_professor_courses(self, professor_id: UUID) -> list[CourseRead]:
+    async def list_professor_courses(
+        self, professor_id: UUID, skip: int = 0, limit: int = 50
+    ) -> PaginatedResponse[CourseRead]:
         """
-        Retorna la lista de cursos asignados a un profesor.
+        Retorna los cursos asignados a un profesor, paginados (50 por página).
 
         Requisitos: 5.3, 5.4
         """
-        courses = await self._course_repo.listar_por_docente(professor_id)
-        return [CourseRead.model_validate(c) for c in courses]
+        courses = await self._course_repo.list_by_professor(
+            professor_id, skip=skip, limit=limit
+        )
+        total = await self._course_repo.count_by_professor(professor_id)
+        return PaginatedResponse(
+            data=[CourseRead.model_validate(c) for c in courses],
+            total=total,
+            skip=skip,
+            limit=limit,
+        )
 
     # ------------------------------------------------------------------
     # Control de acceso RB-04
@@ -186,11 +196,11 @@ class ProfessorCourseService:
             )
 
     async def list_course_students(
-        self, course_id: UUID, professor_id: UUID
-    ) -> list[UserRead]:
+        self, course_id: UUID, professor_id: UUID, skip: int = 0, limit: int = 50
+    ) -> PaginatedResponse[UserRead]:
         """
-        Retorna los estudiantes inscritos en un curso, verificando que el
-        profesor solicitante esté asignado al curso (RB-04).
+        Retorna los estudiantes inscritos en un curso (paginados, 50 por página),
+        verificando que el profesor solicitante esté asignado al curso (RB-04).
 
         Requisitos: 6.1, 6.2
         """
@@ -198,8 +208,16 @@ class ProfessorCourseService:
         await self.verify_professor_assigned_to_course(professor_id, course_id)
 
         # Obtener estudiantes inscritos
-        students = await self._course_repo.listar_estudiantes_inscritos(course_id)
-        return [UserRead.model_validate(s) for s in students]
+        students = await self._course_repo.list_enrolled_students(
+            course_id, skip=skip, limit=limit
+        )
+        total = await self._course_repo.count_enrolled_students(course_id)
+        return PaginatedResponse(
+            data=[UserRead.model_validate(s) for s in students],
+            total=total,
+            skip=skip,
+            limit=limit,
+        )
 
     async def unenroll_student(
         self,

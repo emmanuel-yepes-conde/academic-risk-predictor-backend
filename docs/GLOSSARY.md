@@ -384,6 +384,13 @@ Las interfaces viven en `app/domain/interfaces/`; las implementaciones en `app/i
 
 Base path: `/api/v1`
 
+> **Paginación (convención):** todos los endpoints GET que devuelven listas
+> respaldadas por datos aceptan `skip` (offset, default 0) y `limit`
+> (tamaño de página, **default 50**, máx 100) y responden con
+> `PaginatedResponse[T]` → `{ data, total, skip, limit }`. Excepciones: los
+> catálogos fijos `/templates` y `/admin/jobs`, y el feed `/inapp/notifications`
+> (no leídas, máx 50), que devuelven listas planas. Ver [`PaginatedResponse`](#schemas--dtos).
+
 ### Autenticación (`/auth`)
 
 | Método | Path | Auth | Descripción |
@@ -399,6 +406,7 @@ Base path: `/api/v1`
 | GET | `/users` | ADMIN, PROFESSOR | Listar con paginación y filtros |
 | POST | `/users` | ADMIN | Crear usuario |
 | GET | `/users/{user_id}` | ADMIN, self, PROFESSOR (RB-04) | Obtener por ID |
+| GET | `/users/{user_id}/history` | ADMIN | Historial de auditoría (paginado) |
 | PATCH | `/users/{user_id}` | ADMIN | Actualizar datos |
 | PATCH | `/users/{user_id}/status` | ADMIN | Cambiar estado de cuenta |
 

@@ -529,6 +529,7 @@ async def test_role_based_access_control(
     if user_role == RoleEnum.PROFESSOR:
         repo = _make_repo()
         repo.list_by_student_filtered_by_professor.return_value = []
+        repo.count_by_student_filtered_by_professor.return_value = 0
         session = AsyncMock()
         service = EnrollmentService(repo, session)
 
@@ -537,14 +538,15 @@ async def test_role_based_access_control(
 
         # PROFESSOR triggers filtered query
         repo.list_by_student_filtered_by_professor.assert_awaited_once_with(
-            student_id, user_id, status=None
+            student_id, user_id, status=None, skip=0, limit=50
         )
         repo.list_by_student.assert_not_awaited()
-        assert result == []
+        assert result.data == []
 
     elif user_role == RoleEnum.ADMIN:
         repo = _make_repo()
         repo.list_by_student.return_value = []
+        repo.count_by_student.return_value = 0
         session = AsyncMock()
         service = EnrollmentService(repo, session)
 
@@ -553,10 +555,10 @@ async def test_role_based_access_control(
 
         # ADMIN triggers unfiltered query
         repo.list_by_student.assert_awaited_once_with(
-            student_id, status=EnrollmentStatusEnum.ACTIVE
+            student_id, status=EnrollmentStatusEnum.ACTIVE, skip=0, limit=50
         )
         repo.list_by_student_filtered_by_professor.assert_not_awaited()
-        assert result == []
+        assert result.data == []
 
 
 # ===========================================================================
@@ -736,6 +738,7 @@ async def test_list_returns_only_active_enrollments(
     repo = _make_repo()
     # The repo.list_by_student with status=ACTIVE returns only ACTIVE ones
     repo.list_by_student.return_value = active_enrollments
+    repo.count_by_student.return_value = expected_count
 
     session = AsyncMock()
     admin_user = _make_current_user(user_id=admin_id, role=RoleEnum.ADMIN)
@@ -743,10 +746,10 @@ async def test_list_returns_only_active_enrollments(
 
     result = await service.list_student_enrollments(student_id, admin_user)
 
-    assert len(result) == expected_count
-    assert all(r.status == EnrollmentStatusEnum.ACTIVE for r in result)
+    assert len(result.data) == expected_count
+    assert all(r.status == EnrollmentStatusEnum.ACTIVE for r in result.data)
     repo.list_by_student.assert_awaited_once_with(
-        student_id, status=EnrollmentStatusEnum.ACTIVE
+        student_id, status=EnrollmentStatusEnum.ACTIVE, skip=0, limit=50
     )
 
 
@@ -789,6 +792,7 @@ async def test_professor_rb04_visibility_filter(
     repo = _make_repo()
     # The filtered repo method returns only enrollments in professor's courses
     repo.list_by_student_filtered_by_professor.return_value = visible_enrollments
+    repo.count_by_student_filtered_by_professor.return_value = len(visible_enrollments)
 
     session = AsyncMock()
     professor_user = _make_current_user(user_id=professor_id, role=RoleEnum.PROFESSOR)
@@ -797,8 +801,8 @@ async def test_professor_rb04_visibility_filter(
     result = await service.list_student_enrollments(student_id, professor_user)
 
     # Only visible enrollments returned
-    assert len(result) == len(professor_courses)
-    returned_course_ids = {r.course_id for r in result}
+    assert len(result.data) == len(professor_courses)
+    returned_course_ids = {r.course_id for r in result.data}
     for cid in professor_courses:
         assert cid in returned_course_ids
 
@@ -809,7 +813,7 @@ async def test_professor_rb04_visibility_filter(
 
     # Correct repo method was called
     repo.list_by_student_filtered_by_professor.assert_awaited_once_with(
-        student_id, professor_id, status=None
+        student_id, professor_id, status=None, skip=0, limit=50
     )
     # Unfiltered method was NOT called
     repo.list_by_student.assert_not_awaited()

@@ -5,7 +5,7 @@ configuración de evaluación de cursos.
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.schemas.referral import (
@@ -15,6 +15,7 @@ from app.application.schemas.referral import (
     ReferralRead,
     ReferralUpdate,
 )
+from app.application.schemas.user import PaginatedResponse
 from app.application.services.referral_service import ReferralService
 from app.api.v1.dependencies.auth import CurrentUser, get_current_user, require_roles
 from app.domain.enums import RoleEnum
@@ -48,32 +49,36 @@ async def create_referral(
 
 @router.get(
     "/enrollments/{enrollment_id}/referrals",
-    response_model=list[ReferralRead],
+    response_model=PaginatedResponse[ReferralRead],
     status_code=200,
     summary="Listar remisiones de una inscripción",
     tags=["Remisiones"],
 )
 async def list_referrals_by_enrollment(
     enrollment_id: UUID,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
     current_user: CurrentUser = Depends(get_current_user),
     service: ReferralService = Depends(_get_service),
-) -> list[ReferralRead]:
-    return await service.list_by_enrollment(enrollment_id, current_user)
+) -> PaginatedResponse[ReferralRead]:
+    return await service.list_by_enrollment(enrollment_id, current_user, skip=skip, limit=limit)
 
 
 @router.get(
     "/courses/{course_id}/referrals",
-    response_model=list[ReferralRead],
+    response_model=PaginatedResponse[ReferralRead],
     status_code=200,
     summary="Listar todas las remisiones de un curso",
     tags=["Remisiones"],
 )
 async def list_referrals_by_course(
     course_id: UUID,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
     current_user: CurrentUser = Depends(get_current_user),
     service: ReferralService = Depends(_get_service),
-) -> list[ReferralRead]:
-    return await service.list_by_course(course_id, current_user)
+) -> PaginatedResponse[ReferralRead]:
+    return await service.list_by_course(course_id, current_user, skip=skip, limit=limit)
 
 
 @router.patch(

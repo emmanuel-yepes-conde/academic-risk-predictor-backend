@@ -308,7 +308,7 @@ def _build_service_for_roundtrip_rt(professor: User, course: Course):
     service._course_repo = AsyncMock()
     service._course_repo.obtener_por_id = AsyncMock(return_value=course)
 
-    async def mock_listar_por_docente(docente_id):
+    async def mock_list_by_professor(docente_id, skip=0, limit=50):
         if course.professor_id is not None and course.professor_id == docente_id:
             return [
                 CourseRead(
@@ -327,8 +327,14 @@ def _build_service_for_roundtrip_rt(professor: User, course: Course):
             ]
         return []
 
-    service._course_repo.listar_por_docente = AsyncMock(
-        side_effect=mock_listar_por_docente
+    async def mock_count_by_professor(docente_id):
+        return 1 if (course.professor_id is not None and course.professor_id == docente_id) else 0
+
+    service._course_repo.list_by_professor = AsyncMock(
+        side_effect=mock_list_by_professor
+    )
+    service._course_repo.count_by_professor = AsyncMock(
+        side_effect=mock_count_by_professor
     )
 
     return service, phase
@@ -415,7 +421,7 @@ async def test_assignment_roundtrip_consistency(
 
     # --- Step 3: list_professor_courses(P) contains C (Req 5.3, 5.4) ---
     phase["current"] = "list_courses"
-    courses_result = await service.list_professor_courses(professor_id)
+    courses_result = (await service.list_professor_courses(professor_id)).data
 
     assert isinstance(courses_result, list), (
         f"Expected list, got {type(courses_result).__name__}"
@@ -705,11 +711,17 @@ def _build_service_for_rb04(
     service._course_repo = AsyncMock()
     service._course_repo.obtener_por_id = AsyncMock(side_effect=mock_obtener_por_id)
 
-    async def mock_listar_estudiantes(course_id):
-        return students_by_course.get(course_id, [])
+    async def mock_list_enrolled(course_id, skip=0, limit=50):
+        return students_by_course.get(course_id, [])[skip:skip + limit]
 
-    service._course_repo.listar_estudiantes_inscritos = AsyncMock(
-        side_effect=mock_listar_estudiantes
+    async def mock_count_enrolled(course_id):
+        return len(students_by_course.get(course_id, []))
+
+    service._course_repo.list_enrolled_students = AsyncMock(
+        side_effect=mock_list_enrolled
+    )
+    service._course_repo.count_enrolled_students = AsyncMock(
+        side_effect=mock_count_enrolled
     )
 
     return service
@@ -771,15 +783,15 @@ async def test_rb04_access_control_via_course_professor_id(
     for cid in assigned_course_ids:
         result = await service.list_course_students(cid, professor_id)
 
-        assert isinstance(result, list), (
+        assert isinstance(result.data, list), (
             f"Expected list for assigned course {cid}, "
-            f"got {type(result).__name__}"
+            f"got {type(result.data).__name__}"
         )
-        assert len(result) == students_per_course, (
+        assert len(result.data) == students_per_course, (
             f"Expected {students_per_course} students for course {cid}, "
-            f"got {len(result)}"
+            f"got {len(result.data)}"
         )
-        for student_read in result:
+        for student_read in result.data:
             assert isinstance(student_read, UserRead), (
                 f"Expected UserRead, got {type(student_read).__name__}"
             )

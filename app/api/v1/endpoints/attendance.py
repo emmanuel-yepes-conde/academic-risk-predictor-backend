@@ -23,11 +23,12 @@ from typing import Optional
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.application.schemas.user import PaginatedResponse
 from app.api.v1.dependencies.auth import get_current_user, CurrentUser
 from app.core.config import settings
 from app.infrastructure.database import get_session
@@ -214,21 +215,28 @@ async def create_session(
 
 @router.get(
     "/sessions/course/{course_id}",
-    response_model=list[SessionRead],
+    response_model=PaginatedResponse[SessionRead],
     summary="Listar sesiones de un curso",
 )
 async def list_sessions(
     course_id: UUID,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_session),
-) -> list[SessionRead]:
+) -> PaginatedResponse[SessionRead]:
+    total = (await db.execute(
+        select(func.count()).select_from(ClassSession)
+        .where(ClassSession.course_id == course_id)
+    )).scalar_one()
     result = await db.execute(
         select(ClassSession)
         .where(ClassSession.course_id == course_id)
         .order_by(ClassSession.created_at.desc())
+        .offset(skip).limit(limit)
     )
     sessions = result.scalars().all()
-    return [
+    data = [
         SessionRead(
             id=s.id,
             course_id=s.course_id,
@@ -243,6 +251,7 @@ async def list_sessions(
         )
         for s in sessions
     ]
+    return PaginatedResponse(data=data, total=total, skip=skip, limit=limit)
 
 
 @router.post(
@@ -411,25 +420,32 @@ async def register_attendance(
 
 @router.get(
     "/sessions/{session_id}/attendances",
-    response_model=list[AttendanceRead],
+    response_model=PaginatedResponse[AttendanceRead],
     summary="Ver lista de asistentes a una sesión (profesor)",
 )
 async def get_attendances(
     session_id: UUID,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_session),
-) -> list[AttendanceRead]:
+) -> PaginatedResponse[AttendanceRead]:
     if current_user.role not in (RoleEnum.PROFESSOR, RoleEnum.ADMIN):
         raise HTTPException(status_code=403, detail="Solo profesores pueden ver la lista")
 
+    total = (await db.execute(
+        select(func.count()).select_from(Attendance)
+        .where(Attendance.session_id == session_id)
+    )).scalar_one()
     result = await db.execute(
         select(Attendance, User)
         .join(User, Attendance.student_id == User.id)
         .where(Attendance.session_id == session_id)
         .order_by(Attendance.recorded_at)
+        .offset(skip).limit(limit)
     )
     rows = result.all()
-    return [
+    data = [
         AttendanceRead(
             id=att.id,
             student_id=att.student_id,
@@ -438,6 +454,7 @@ async def get_attendances(
         )
         for att, user in rows
     ]
+    return PaginatedResponse(data=data, total=total, skip=skip, limit=limit)
 
 
 @router.patch(
@@ -537,22 +554,29 @@ class SessionHistoryItem(BaseModel):
 
 @router.get(
     "/student/me/history",
-    response_model=list[AttendanceHistoryItem],
+    response_model=PaginatedResponse[AttendanceHistoryItem],
     summary="Historial de asistencias del estudiante autenticado",
 )
 async def get_my_attendance_history(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_session),
-) -> list[AttendanceHistoryItem]:
-    """Devuelve todas las asistencias registradas del estudiante, con hora en Colombia."""
+) -> PaginatedResponse[AttendanceHistoryItem]:
+    """Devuelve las asistencias registradas del estudiante, paginadas, con hora en Colombia."""
     if current_user.role not in (RoleEnum.STUDENT, RoleEnum.ADMIN):
         raise HTTPException(status_code=403, detail="Solo estudiantes pueden ver su historial")
 
+    total = (await db.execute(
+        select(func.count()).select_from(Attendance)
+        .where(Attendance.student_id == current_user.id)
+    )).scalar_one()
     result = await db.execute(
         select(Attendance, ClassSession)
         .join(ClassSession, Attendance.session_id == ClassSession.id)
         .where(Attendance.student_id == current_user.id)
         .order_by(Attendance.recorded_at.desc())
+        .offset(skip).limit(limit)
     )
     rows = result.all()
 
@@ -569,20 +593,30 @@ async def get_my_attendance_history(
             recorded_at=att.recorded_at,
             recorded_at_colombia=readable,
         ))
-    return items
+    return PaginatedResponse(data=items, total=total, skip=skip, limit=limit)
 
 
 @router.get(
     "/student/me/history/course/{course_id}",
-    response_model=list[AttendanceHistoryItem],
+    response_model=PaginatedResponse[AttendanceHistoryItem],
     summary="Historial de asistencias del estudiante en un curso específico",
 )
 async def get_my_course_attendance(
     course_id: UUID,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_session),
-) -> list[AttendanceHistoryItem]:
-    """Asistencias del estudiante filtradas por curso."""
+) -> PaginatedResponse[AttendanceHistoryItem]:
+    """Asistencias del estudiante filtradas por curso, paginadas."""
+    total = (await db.execute(
+        select(func.count()).select_from(Attendance)
+        .join(ClassSession, Attendance.session_id == ClassSession.id)
+        .where(
+            Attendance.student_id == current_user.id,
+            ClassSession.course_id == course_id,
+        )
+    )).scalar_one()
     result = await db.execute(
         select(Attendance, ClassSession)
         .join(ClassSession, Attendance.session_id == ClassSession.id)
@@ -591,6 +625,7 @@ async def get_my_course_attendance(
             ClassSession.course_id == course_id,
         )
         .order_by(Attendance.recorded_at.desc())
+        .offset(skip).limit(limit)
     )
     rows = result.all()
 
@@ -607,27 +642,34 @@ async def get_my_course_attendance(
             recorded_at=att.recorded_at,
             recorded_at_colombia=readable,
         ))
-    return items
+    return PaginatedResponse(data=items, total=total, skip=skip, limit=limit)
 
 
 @router.get(
     "/sessions/course/{course_id}/history",
-    response_model=list[SessionHistoryItem],
+    response_model=PaginatedResponse[SessionHistoryItem],
     summary="Historial completo de sesiones de un curso (profesor)",
 )
 async def get_course_sessions_history(
     course_id: UUID,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_session),
-) -> list[SessionHistoryItem]:
-    """Profesor ve todas las sesiones de su curso con lista de asistentes."""
+) -> PaginatedResponse[SessionHistoryItem]:
+    """Profesor ve las sesiones de su curso con lista de asistentes, paginadas."""
     if current_user.role not in (RoleEnum.PROFESSOR, RoleEnum.ADMIN):
         raise HTTPException(status_code=403, detail="Solo profesores pueden ver el historial")
 
+    total = (await db.execute(
+        select(func.count()).select_from(ClassSession)
+        .where(ClassSession.course_id == course_id)
+    )).scalar_one()
     sessions_q = await db.execute(
         select(ClassSession)
         .where(ClassSession.course_id == course_id)
         .order_by(ClassSession.created_at.desc())
+        .offset(skip).limit(limit)
     )
     sessions = sessions_q.scalars().all()
 
@@ -657,7 +699,7 @@ async def get_course_sessions_history(
             total_attendees=len(attendees),
             attendees=attendees,
         ))
-    return result
+    return PaginatedResponse(data=result, total=total, skip=skip, limit=limit)
 
 
 # ─── QR Code image endpoint ───────────────────────────────────────────────────

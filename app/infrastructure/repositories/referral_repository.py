@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.models.referral import Referral
@@ -26,13 +26,25 @@ class ReferralRepository:
         )
         return result.scalar_one_or_none()
 
-    async def list_by_enrollment(self, enrollment_id: UUID) -> list[Referral]:
+    async def list_by_enrollment(
+        self, enrollment_id: UUID, skip: int = 0, limit: int = 50
+    ) -> list[Referral]:
         result = await self._session.execute(
             select(Referral)
             .where(Referral.enrollment_id == enrollment_id)
             .order_by(Referral.created_at.desc())
+            .offset(skip)
+            .limit(limit)
         )
         return list(result.scalars().all())
+
+    async def count_by_enrollment(self, enrollment_id: UUID) -> int:
+        result = await self._session.execute(
+            select(func.count())
+            .select_from(Referral)
+            .where(Referral.enrollment_id == enrollment_id)
+        )
+        return result.scalar_one()
 
     async def list_by_professor(self, professor_id: UUID) -> list[Referral]:
         """Todas las remisiones creadas por un profesor."""
@@ -43,7 +55,9 @@ class ReferralRepository:
         )
         return list(result.scalars().all())
 
-    async def list_by_course(self, course_id: UUID) -> list[Referral]:
+    async def list_by_course(
+        self, course_id: UUID, skip: int = 0, limit: int = 50
+    ) -> list[Referral]:
         """Remisiones de todos los estudiantes de un curso."""
         from app.infrastructure.models.enrollment import Enrollment
         result = await self._session.execute(
@@ -51,8 +65,20 @@ class ReferralRepository:
             .join(Enrollment, Referral.enrollment_id == Enrollment.id)
             .where(Enrollment.course_id == course_id)
             .order_by(Referral.created_at.desc())
+            .offset(skip)
+            .limit(limit)
         )
         return list(result.scalars().all())
+
+    async def count_by_course(self, course_id: UUID) -> int:
+        from app.infrastructure.models.enrollment import Enrollment
+        result = await self._session.execute(
+            select(func.count())
+            .select_from(Referral)
+            .join(Enrollment, Referral.enrollment_id == Enrollment.id)
+            .where(Enrollment.course_id == course_id)
+        )
+        return result.scalar_one()
 
     async def update(self, referral_id: UUID, fields: dict) -> Referral | None:
         referral = await self.get_by_id(referral_id)

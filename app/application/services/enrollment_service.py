@@ -16,6 +16,7 @@ from app.application.schemas.enrollment import (
     EnrollmentStatusUpdate,
     EnrollmentUpdate,
 )
+from app.application.schemas.user import PaginatedResponse
 from app.domain.enums import CourseStatusEnum, EnrollmentStatusEnum, RoleEnum
 from app.domain.interfaces.enrollment_repository import IEnrollmentRepository
 from app.infrastructure.models.course import Course
@@ -191,7 +192,9 @@ class EnrollmentService:
         student_id: UUID,
         current_user: object,
         status: EnrollmentStatusEnum | None = None,
-    ) -> list[EnrollmentRead]:
+        skip: int = 0,
+        limit: int = 50,
+    ) -> PaginatedResponse[EnrollmentRead]:
         """
         Lista las inscripciones de un estudiante.
 
@@ -203,18 +206,28 @@ class EnrollmentService:
         """
         if current_user.role == RoleEnum.PROFESSOR:
             enrollments = await self._repo.list_by_student_filtered_by_professor(
+                student_id, current_user.id, status=status, skip=skip, limit=limit
+            )
+            total = await self._repo.count_by_student_filtered_by_professor(
                 student_id, current_user.id, status=status
             )
         elif current_user.role == RoleEnum.STUDENT:
             # STUDENT — return all statuses when no filter (progress view)
             enrollments = await self._repo.list_by_student(
-                student_id, status=status
+                student_id, status=status, skip=skip, limit=limit
             )
+            total = await self._repo.count_by_student(student_id, status=status)
         else:
             # ADMIN — default to ACTIVE when no filter (preserve current behavior)
             effective_status = status if status is not None else EnrollmentStatusEnum.ACTIVE
             enrollments = await self._repo.list_by_student(
-                student_id, status=effective_status
+                student_id, status=effective_status, skip=skip, limit=limit
             )
+            total = await self._repo.count_by_student(student_id, status=effective_status)
 
-        return [EnrollmentRead.model_validate(e) for e in enrollments]
+        return PaginatedResponse(
+            data=[EnrollmentRead.model_validate(e) for e in enrollments],
+            total=total,
+            skip=skip,
+            limit=limit,
+        )

@@ -6,7 +6,7 @@ get_by_student_and_course does NOT filter by status — intentional for reactiva
 
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.schemas.audit_log import AuditLogCreate
@@ -109,7 +109,8 @@ class EnrollmentRepository(IEnrollmentRepository):
         return enrollment
 
     async def list_by_student(
-        self, student_id: UUID, status: EnrollmentStatusEnum | None = None
+        self, student_id: UUID, status: EnrollmentStatusEnum | None = None,
+        skip: int = 0, limit: int = 50,
     ) -> list[Enrollment]:
         """
         SELECT enrollments for a student with optional status filter.
@@ -118,8 +119,22 @@ class EnrollmentRepository(IEnrollmentRepository):
         stmt = select(Enrollment).where(Enrollment.student_id == student_id)
         if status is not None:
             stmt = stmt.where(Enrollment.status == status)
+        stmt = stmt.offset(skip).limit(limit)
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
+
+    async def count_by_student(
+        self, student_id: UUID, status: EnrollmentStatusEnum | None = None
+    ) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(Enrollment)
+            .where(Enrollment.student_id == student_id)
+        )
+        if status is not None:
+            stmt = stmt.where(Enrollment.status == status)
+        result = await self._session.execute(stmt)
+        return result.scalar_one()
 
     async def list_by_course(
         self, course_id: UUID, status: EnrollmentStatusEnum | None = None
@@ -167,6 +182,7 @@ class EnrollmentRepository(IEnrollmentRepository):
     async def list_by_student_filtered_by_professor(
         self, student_id: UUID, professor_id: UUID,
         status: EnrollmentStatusEnum | None = None,
+        skip: int = 0, limit: int = 50,
     ) -> list[Enrollment]:
         """
         SELECT enrollments with JOIN to courses WHERE professor_id matches (RB-04).
@@ -183,5 +199,24 @@ class EnrollmentRepository(IEnrollmentRepository):
         )
         if status is not None:
             stmt = stmt.where(Enrollment.status == status)
+        stmt = stmt.offset(skip).limit(limit)
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
+
+    async def count_by_student_filtered_by_professor(
+        self, student_id: UUID, professor_id: UUID,
+        status: EnrollmentStatusEnum | None = None,
+    ) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(Enrollment)
+            .join(Course, Enrollment.course_id == Course.id)
+            .where(
+                Enrollment.student_id == student_id,
+                Course.professor_id == professor_id,
+            )
+        )
+        if status is not None:
+            stmt = stmt.where(Enrollment.status == status)
+        result = await self._session.execute(stmt)
+        return result.scalar_one()

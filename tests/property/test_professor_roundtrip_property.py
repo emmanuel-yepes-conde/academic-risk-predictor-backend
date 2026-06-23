@@ -144,8 +144,8 @@ def _build_service_for_roundtrip(
     service._course_repo = AsyncMock()
     service._course_repo.obtener_por_id = AsyncMock(return_value=course)
 
-    # For list_professor_courses, the service delegates to _course_repo.listar_por_docente
-    async def mock_listar_por_docente(docente_id):
+    # For list_professor_courses, the service delegates to _course_repo.list_by_professor
+    async def mock_list_by_professor(docente_id, skip=0, limit=50):
         if course.professor_id is not None and course.professor_id == docente_id:
             return [
                 CourseRead(
@@ -164,7 +164,11 @@ def _build_service_for_roundtrip(
             ]
         return []
 
-    service._course_repo.listar_por_docente = AsyncMock(side_effect=mock_listar_por_docente)
+    async def mock_count_by_professor(docente_id):
+        return 1 if (course.professor_id is not None and course.professor_id == docente_id) else 0
+
+    service._course_repo.list_by_professor = AsyncMock(side_effect=mock_list_by_professor)
+    service._course_repo.count_by_professor = AsyncMock(side_effect=mock_count_by_professor)
 
     return service, phase
 
@@ -262,7 +266,7 @@ async def test_professor_course_assignment_roundtrip(
 
     # --- Step 3: GET courses for professor (Req 4.6) ---
     phase["current"] = "list_courses"
-    courses_result = await service.list_professor_courses(professor_id)
+    courses_result = (await service.list_professor_courses(professor_id)).data
 
     assert isinstance(courses_result, list), (
         f"Expected list, got {type(courses_result).__name__}"

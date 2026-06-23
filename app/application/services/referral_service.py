@@ -15,6 +15,7 @@ from app.application.schemas.referral import (
     ReferralRead,
     ReferralUpdate,
 )
+from app.application.schemas.user import PaginatedResponse
 from app.domain.enums import RoleEnum
 from app.infrastructure.models.course import Course
 from app.infrastructure.models.enrollment import Enrollment
@@ -128,8 +129,8 @@ class ReferralService:
         return ReferralRead.model_validate(referral)
 
     async def list_by_enrollment(
-        self, enrollment_id: UUID, current_user: object
-    ) -> list[ReferralRead]:
+        self, enrollment_id: UUID, current_user: object, skip: int = 0, limit: int = 50
+    ) -> PaginatedResponse[ReferralRead]:
         enrollment = await self._get_enrollment(enrollment_id)
 
         if current_user.role == RoleEnum.STUDENT:
@@ -138,19 +139,31 @@ class ReferralService:
         elif current_user.role == RoleEnum.PROFESSOR:
             await self._check_professor_access(enrollment, current_user.id)
 
-        referrals = await self._repo.list_by_enrollment(enrollment_id)
-        return [ReferralRead.model_validate(r) for r in referrals]
+        referrals = await self._repo.list_by_enrollment(enrollment_id, skip=skip, limit=limit)
+        total = await self._repo.count_by_enrollment(enrollment_id)
+        return PaginatedResponse(
+            data=[ReferralRead.model_validate(r) for r in referrals],
+            total=total,
+            skip=skip,
+            limit=limit,
+        )
 
     async def list_by_course(
-        self, course_id: UUID, current_user: object
-    ) -> list[ReferralRead]:
+        self, course_id: UUID, current_user: object, skip: int = 0, limit: int = 50
+    ) -> PaginatedResponse[ReferralRead]:
         course = await self._get_course(course_id)
 
         if current_user.role == RoleEnum.PROFESSOR and course.professor_id != current_user.id:
             raise HTTPException(status_code=403, detail="Acceso denegado")
 
-        referrals = await self._repo.list_by_course(course_id)
-        return [ReferralRead.model_validate(r) for r in referrals]
+        referrals = await self._repo.list_by_course(course_id, skip=skip, limit=limit)
+        total = await self._repo.count_by_course(course_id)
+        return PaginatedResponse(
+            data=[ReferralRead.model_validate(r) for r in referrals],
+            total=total,
+            skip=skip,
+            limit=limit,
+        )
 
     async def update(
         self, referral_id: UUID, body: ReferralUpdate, current_user: object

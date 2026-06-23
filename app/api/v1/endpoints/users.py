@@ -80,7 +80,7 @@ async def list_users(
     status: Optional[UserStatusEnum] = None,
     program_id: Optional[UUID] = None,
     skip: int = Query(0, ge=0),
-    limit: int = Query(20, ge=1, le=100),
+    limit: int = Query(50, ge=1, le=100),
     current_user: CurrentUser = Depends(require_roles(RoleEnum.ADMIN, RoleEnum.PROFESSOR)),
     service: UserService = Depends(_get_service),
 ) -> PaginatedResponse[UserRead]:
@@ -127,14 +127,16 @@ async def get_user(
 # GET /users/{user_id}/history — ADMIN only (audit log)
 # ---------------------------------------------------------------------------
 
-@router.get("/users/{user_id}/history", response_model=list[AuditLogRead], status_code=200)
+@router.get("/users/{user_id}/history", response_model=PaginatedResponse[AuditLogRead], status_code=200)
 async def get_user_history(
     user_id: UUID,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
     current_user: CurrentUser = Depends(require_roles(RoleEnum.ADMIN)),
     service: UserService = Depends(_get_service),
-) -> list[AuditLogRead]:
-    """Devuelve el historial de cambios de un usuario (quién cambió qué y cuándo)."""
-    return await service.get_user_history(user_id)
+) -> PaginatedResponse[AuditLogRead]:
+    """Devuelve el historial de cambios de un usuario (quién cambió qué y cuándo), paginado."""
+    return await service.get_user_history(user_id, skip=skip, limit=limit)
 
 
 # ---------------------------------------------------------------------------

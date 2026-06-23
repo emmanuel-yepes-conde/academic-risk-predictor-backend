@@ -44,10 +44,26 @@ class SubjectRepository(ISubjectRepository):
         )
         return result.scalar_one_or_none()
 
-    async def list_by_program(self, program_id: UUID) -> list[Subject]:
-        stmt = select(Subject).where(Subject.program_id == program_id)
+    async def list_by_program(
+        self, program_id: UUID, skip: int = 0, limit: int = 50
+    ) -> list[Subject]:
+        stmt = (
+            select(Subject)
+            .where(Subject.program_id == program_id)
+            .offset(skip)
+            .limit(limit)
+        )
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
+
+    async def count_by_program(self, program_id: UUID) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(Subject)
+            .where(Subject.program_id == program_id)
+        )
+        result = await self._session.execute(stmt)
+        return result.scalar_one()
 
     async def list_all(
         self, skip: int, limit: int, status: CourseStatusEnum | None = None

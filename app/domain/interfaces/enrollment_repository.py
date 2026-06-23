@@ -35,14 +35,27 @@ class IEnrollmentRepository(ABC):
 
     @abstractmethod
     async def list_by_student(
-        self, student_id: UUID, status: EnrollmentStatusEnum | None = None
+        self, student_id: UUID, status: EnrollmentStatusEnum | None = None,
+        skip: int = 0, limit: int = 50,
     ) -> list[Enrollment]: ...
+
+    @abstractmethod
+    async def count_by_student(
+        self, student_id: UUID, status: EnrollmentStatusEnum | None = None
+    ) -> int: ...
 
     @abstractmethod
     async def list_by_student_filtered_by_professor(
         self, student_id: UUID, professor_id: UUID,
         status: EnrollmentStatusEnum | None = None,
+        skip: int = 0, limit: int = 50,
     ) -> list[Enrollment]: ...
+
+    @abstractmethod
+    async def count_by_student_filtered_by_professor(
+        self, student_id: UUID, professor_id: UUID,
+        status: EnrollmentStatusEnum | None = None,
+    ) -> int: ...
 
     @abstractmethod
     async def list_by_course(

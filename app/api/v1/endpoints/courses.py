@@ -51,7 +51,7 @@ async def list_courses(
     status: CourseStatusEnum | None = Query(None),
     subject_id: UUID | None = Query(None),
     skip: int = Query(0, ge=0),
-    limit: int = Query(20, ge=1, le=100),
+    limit: int = Query(50, ge=1, le=100),
     current_user: CurrentUser = Depends(get_current_user),
     service: CourseService = Depends(_get_course_service),
 ) -> PaginatedResponse[CourseRead]:
@@ -199,21 +199,23 @@ async def get_course_professor(
 
 @router.get(
     "/professors/{professor_id}/courses",
-    response_model=list[CourseRead],
+    response_model=PaginatedResponse[CourseRead],
     status_code=200,
     summary="Listar secciones asignadas a un profesor",
     tags=["Profesores"],
 )
 async def list_courses_by_professor(
     professor_id: UUID,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
     service: ProfessorCourseService = Depends(_get_professor_course_service),
-) -> list[CourseRead]:
-    return await service.list_professor_courses(professor_id)
+) -> PaginatedResponse[CourseRead]:
+    return await service.list_professor_courses(professor_id, skip=skip, limit=limit)
 
 
 @router.get(
     "/courses/{course_id}/students",
-    response_model=list[UserRead],
+    response_model=PaginatedResponse[UserRead],
     status_code=200,
     summary="Listar estudiantes inscritos en una sección",
     tags=["Secciones"],
@@ -221,9 +223,11 @@ async def list_courses_by_professor(
 async def list_course_students(
     course_id: UUID,
     professor_id: UUID = Query(..., description="ID del profesor que solicita el acceso"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
     service: ProfessorCourseService = Depends(_get_professor_course_service),
-) -> list[UserRead]:
-    return await service.list_course_students(course_id, professor_id)
+) -> PaginatedResponse[UserRead]:
+    return await service.list_course_students(course_id, professor_id, skip=skip, limit=limit)
 
 
 @router.get(

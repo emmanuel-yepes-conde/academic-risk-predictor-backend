@@ -105,15 +105,19 @@ class UserService:
             raise HTTPException(status_code=404, detail="Usuario no encontrado")
         return UserRead.model_validate(user)
 
-    async def get_user_history(self, id: UUID) -> list:
+    async def get_user_history(
+        self, id: UUID, skip: int = 0, limit: int = 50
+    ) -> PaginatedResponse:
         """
-        Devuelve el historial de auditoría de un usuario.
+        Devuelve el historial de auditoría de un usuario, paginado (50 por página).
         Lanza HTTPException(404) si el usuario no existe.
         """
         user = await self._repo.get_by_id(id)
         if user is None:
             raise HTTPException(status_code=404, detail="Usuario no encontrado")
-        return await self._repo.get_audit_history(id)
+        history = await self._repo.get_audit_history(id, skip=skip, limit=limit)
+        total = await self._repo.count_audit_history(id)
+        return PaginatedResponse(data=history, total=total, skip=skip, limit=limit)
 
     async def update_user_status(self, id: UUID, status: UserStatusEnum) -> UserRead:
         """

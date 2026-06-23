@@ -218,7 +218,21 @@ class UserRepository(IUserRepository):
         await self._session.flush()
         return user
 
-    async def get_audit_history(self, record_id: UUID) -> list[Any]:
+    async def count_audit_history(self, record_id: UUID) -> int:
+        """Total audit log entries for a user record."""
+        from app.infrastructure.models.audit_log import AuditLog
+        stmt = (
+            select(func.count())
+            .select_from(AuditLog)
+            .where(AuditLog.table_name == "users")
+            .where(AuditLog.record_id == record_id)
+        )
+        result = await self._session.execute(stmt)
+        return result.scalar_one()
+
+    async def get_audit_history(
+        self, record_id: UUID, skip: int = 0, limit: int = 50
+    ) -> list[Any]:
         """Return audit log entries for a user record, newest first."""
         from app.infrastructure.models.audit_log import AuditLog
         stmt = (
@@ -227,6 +241,8 @@ class UserRepository(IUserRepository):
             .where(AuditLog.table_name == "users")
             .where(AuditLog.record_id == record_id)
             .order_by(AuditLog.timestamp.desc())
+            .offset(skip)
+            .limit(limit)
         )
         result = await self._session.execute(stmt)
         rows = result.all()

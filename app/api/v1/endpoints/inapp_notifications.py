@@ -56,8 +56,8 @@ async def get_unread(
 
 @router.get("/all", response_model=list[NotificationRead])
 async def get_all(
-    limit: int = Query(default=30, le=100),
-    offset: int = Query(default=0),
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_session),
 ) -> list[NotificationRead]:
