@@ -89,22 +89,33 @@ class CourseRepository(ICourseRepository):
         return [_to_read(c, s) for c, s in result.all()]
 
     async def list_by_professor(
-        self, professor_id: UUID, skip: int = 0, limit: int = 50
+        self, professor_id: UUID, skip: int = 0, limit: int = 50, search: str | None = None
     ) -> list[CourseRead]:
-        result = await self._session.execute(
+        stmt = (
             _base_joined_stmt()
             .where(Course.professor_id == professor_id)
-            .offset(skip)
-            .limit(limit)
         )
+        if search:
+            pattern = f"%{search}%"
+            stmt = stmt.where(
+                Subject.name.ilike(pattern) | Subject.code.ilike(pattern)
+            )
+        stmt = stmt.order_by(Course.academic_period.desc(), Subject.name, Course.section)
+        result = await self._session.execute(stmt.offset(skip).limit(limit))
         return [_to_read(c, s) for c, s in result.all()]
 
-    async def count_by_professor(self, professor_id: UUID) -> int:
+    async def count_by_professor(self, professor_id: UUID, search: str | None = None) -> int:
         stmt = (
             select(func.count())
             .select_from(Course)
+            .join(Subject, Course.subject_id == Subject.id)
             .where(Course.professor_id == professor_id)
         )
+        if search:
+            pattern = f"%{search}%"
+            stmt = stmt.where(
+                Subject.name.ilike(pattern) | Subject.code.ilike(pattern)
+            )
         result = await self._session.execute(stmt)
         return result.scalar_one()
 

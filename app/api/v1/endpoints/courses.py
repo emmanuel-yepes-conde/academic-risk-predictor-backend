@@ -207,10 +207,11 @@ async def get_course_professor(
 async def list_courses_by_professor(
     professor_id: UUID,
     skip: int = Query(0, ge=0),
-    limit: int = Query(50, ge=1, le=100),
+    limit: int = Query(50, ge=1, le=200),
+    search: str | None = Query(None, min_length=1, description="Filtrar por nombre o código de materia"),
     service: ProfessorCourseService = Depends(_get_professor_course_service),
 ) -> PaginatedResponse[CourseRead]:
-    return await service.list_professor_courses(professor_id, skip=skip, limit=limit)
+    return await service.list_professor_courses(professor_id, skip=skip, limit=limit, search=search)
 
 
 @router.get(

@@ -31,11 +31,11 @@ class ICourseRepository(ABC):
 
     @abstractmethod
     async def list_by_professor(
-        self, professor_id: UUID, skip: int = 0, limit: int = 50
+        self, professor_id: UUID, skip: int = 0, limit: int = 50, search: str | None = None
     ) -> list[CourseRead]: ...
 
     @abstractmethod
-    async def count_by_professor(self, professor_id: UUID) -> int: ...
+    async def count_by_professor(self, professor_id: UUID, search: str | None = None) -> int: ...
 
     @abstractmethod
     async def list_by_program(

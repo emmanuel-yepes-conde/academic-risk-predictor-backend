@@ -157,7 +157,7 @@ class ProfessorCourseService:
         return UserRead.model_validate(professor)
 
     async def list_professor_courses(
-        self, professor_id: UUID, skip: int = 0, limit: int = 50
+        self, professor_id: UUID, skip: int = 0, limit: int = 50, search: str | None = None
     ) -> PaginatedResponse[CourseRead]:
         """
         Retorna los cursos asignados a un profesor, paginados (50 por página).
@@ -165,9 +165,9 @@ class ProfessorCourseService:
         Requisitos: 5.3, 5.4
         """
         courses = await self._course_repo.list_by_professor(
-            professor_id, skip=skip, limit=limit
+            professor_id, skip=skip, limit=limit, search=search
         )
-        total = await self._course_repo.count_by_professor(professor_id)
+        total = await self._course_repo.count_by_professor(professor_id, search=search)
         return PaginatedResponse(
             data=[CourseRead.model_validate(c) for c in courses],
             total=total,
